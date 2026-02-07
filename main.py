@@ -171,6 +171,10 @@ def plate_on_hetero(update, context):
     if "гетеро" in text:
         update.message.reply_text("💏")
 
+def plate_on_malvy(update, context):
+    text = update.message.text.lower()
+    if "гетеро" in text:
+        update.message.reply_text("👹")
 # =================== MAIN ===================
 def main():
     token = os.environ['TOKEN']
@@ -196,7 +200,9 @@ def main():
     dp.add_handler(conv_handler)
 
     # --- Додаємо наш хендлер для слова "гетеро" ---
+  dp.add_handler(MessageHandler(Filters.text & ~Filters.command, plate_on_malvy))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, plate_on_hetero))
+  
 
     updater.start_polling()
     updater.idle()
