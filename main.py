@@ -247,6 +247,16 @@ def next_word(update, context):
     # The state does not change from GUESSING
     return GUESSING
 
+from telegram.ext import MessageHandler, Filters
+
+# Ця функція перевіряє текст повідомлення
+def plate_on_hetero(update, context):
+    text = update.message.text.lower()  # перетворюємо текст на нижній регістр
+    if "гетеро" in text:
+        update.message.reply_text("🍽️")  # надсилаємо стікер/emoji
+
+# Додаємо обробник у dispatcher
+dp.add_handler(MessageHandler(Filters.text & ~Filters.command, plate_on_hetero))
 
 def main():
     """
