@@ -3,7 +3,7 @@ name: Run Telegram Bot
 on:
   push:
     branches:
-      - main
+      - master
 
 jobs:
   run-bot:
