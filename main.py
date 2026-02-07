@@ -169,7 +169,7 @@ def next_word(update, context):
 def plate_on_hetero(update, context):
     text = update.message.text.lower()
     if "гетеро" in text:
-        update.message.reply_text("🍽️")
+        update.message.reply_text("💏")
 
 # =================== MAIN ===================
 def main():
