@@ -1,0 +1,27 @@
+name: Run Telegram Bot
+
+on:
+  push:
+    branches:
+      - main  # або твоя основна гілка
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run bot
+        env:
+          TOKEN: ${{ secrets.TOKEN }}
+        run: python main.py
+
+run_bot.yml
