@@ -259,24 +259,16 @@ def plate_on_hetero(update, context):
 dp.add_handler(MessageHandler(Filters.text & ~Filters.command, plate_on_hetero))
 
 def main():
-    """
-    Main bot function
-    """
     token = os.environ['TOKEN']
-    # Create the Updater and pass it your bot's token.
     updater = Updater(token, use_context=True)
-
-    # Get the dispatcher to register handlers
     dp = updater.dispatcher
 
-    # Add conversation handler with the states CHOOSING, TYPING_CHOICE and TYPING_REPLY
+    # --- Додаємо хендлери гри ---
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
-
         states={
             CHOOSING_PLAYER: [CallbackQueryHandler(next_player, pattern="^next_player$"),
                               CommandHandler('stop', stop)],
-
             GUESSING: [MessageHandler(Filters.text, guesser),
                        CallbackQueryHandler(see_word, pattern="^look$"),
                        CallbackQueryHandler(next_word, pattern="^next$")],
@@ -288,17 +280,14 @@ def main():
 
     dp.add_handler(CommandHandler('rating', show_rating))
     dp.add_handler(CommandHandler('clear_rating', clear_rating))
-
     dp.add_handler(conv_handler)
+
+    # --- Ось сюди вставляємо хендлер для "гетеро" ---
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, plate_on_hetero))
 
     # Start the Bot
     updater.start_polling()
-
-    # Run the bot until you press Ctrl-C or the process receives SIGINT,
-    # SIGTERM or SIGABRT. This should be used most of the time, since
-    # start_polling() is non-blocking and will stop the bot gracefully.
     updater.idle()
-
 
 if __name__ == '__main__':
     main()
