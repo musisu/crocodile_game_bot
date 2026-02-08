@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import json
 from random import shuffle, choice
 from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -10,6 +11,20 @@ from telegram.ext import (
     ConversationHandler, CallbackQueryHandler
 )
 import logging
+
+# ---------- JSON для монет ----------
+COINS_FILE = "coins.json"
+
+def load_coins():
+    try:
+        with open(COINS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def save_coins(coins):
+    with open(COINS_FILE, "w", encoding="utf-8") as f:
+        json.dump(coins, f, ensure_ascii=False, indent=2)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,7 +42,7 @@ def is_admin(update, context):
         return member.status in ("administrator", "creator")
     except Exception:
         return False
-        
+
 # ---------- WORDS ----------
 with open("words.txt", "r", encoding="utf-8") as f:
     WORDS = [w.strip().lower() for w in f.readlines()]
@@ -48,21 +63,18 @@ def global_text_handler(update, context):
 
     # 👹 Реакція на "гетеро"
     if "гетеро" in text:
-       coins = context.bot_data.setdefault("coins", {})
-       coins[username] = max(coins.get(username, 0) - 1, 0)
-       context.bot_data["coins"] = coins
+        coins = load_coins()
+        coins[username] = max(coins.get(username, 0) - 1, 0)
+        save_coins(coins)
 
-       # Відправляємо спочатку стікер
-       update.message.reply_text("👹")  # якщо хочеш справжній стікер, можна використати reply_sticker(sticker_id)
-
-       # Потім повідомлення про -1 монету
-       update.message.reply_text(f"@{username}, віднято 1 монету за «гетеро»!")
+        update.message.reply_text("👹")
+        update.message.reply_text(f"@{username}, віднято 1 монету за «гетеро»!")
 
     # #️⃣ Хештег +50 монет
     if "#" in text and update.message.chat.id == SPECIAL_HASHTAG_CHAT:
-        coins = context.bot_data.setdefault("coins", {})
+        coins = load_coins()
         coins[username] = coins.get(username, 0) + 50
-        context.bot_data["coins"] = coins
+        save_coins(coins)
         update.message.reply_text(f"🎉 @{username}, отримано 50 монет за хештег!")
 
 # ---------- GAME ----------
@@ -105,12 +117,13 @@ def guesser(update, context):
     ):
         update.message.reply_text(f"{user.first_name} вгадав слово!")
 
-        coins = context.bot_data.setdefault("coins", {})
+        coins = load_coins()
         rating = context.chat_data.setdefault("rating", {})
         rating[username] = rating.get(username, 0) + 1
 
         position = sorted(rating.values(), reverse=True).index(rating[username]) + 1
         coins[username] = coins.get(username, 0) + TOP_REWARD.get(position, 0)
+        save_coins(coins)
 
         context.chat_data["winner"] = user.id
         context.chat_data["win_time"] = datetime.now()
@@ -159,7 +172,7 @@ def next_word(update, context):
 def wallet(update, context):
     user = update.message.from_user
     username = user.username or user.first_name
-    coins = context.bot_data.get("coins", {}).get(username, 0)
+    coins = load_coins().get(username, 0)
     update.message.reply_text(f"@{username}, у вас {coins} монет")
 
 # ---------- ADD / DEDUCT THROUGH REPLY ----------
@@ -185,11 +198,11 @@ def add_coins(update, context):
     target_user = update.message.reply_to_message.from_user
     username = target_user.username or target_user.first_name
 
-    coins = context.bot_data.setdefault("coins", {})
+    coins = load_coins()
     coins[username] = coins.get(username, 0) + amount
+    save_coins(coins)
 
     update.message.reply_text(f"✅ @{username} +{amount} монет")
-
 
 def deduct_coins(update, context):
     if not is_admin(update, context):
@@ -213,14 +226,15 @@ def deduct_coins(update, context):
     target_user = update.message.reply_to_message.from_user
     username = target_user.username or target_user.first_name
 
-    coins = context.bot_data.setdefault("coins", {})
+    coins = load_coins()
     coins[username] = max(coins.get(username, 0) - amount, 0)
+    save_coins(coins)
 
     update.message.reply_text(f"✅ @{username} -{amount} монет")
-    
+
 # ---------- TOPS ----------
 def top_money(update, context):
-    coins = context.bot_data.get("coins", {})
+    coins = load_coins()
     if not coins:
         update.message.reply_text("Поки що ніхто не має монет.")
         return
