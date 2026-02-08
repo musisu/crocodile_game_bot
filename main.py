@@ -48,17 +48,17 @@ def global_text_handler(update, context):
 
     # 👹 Реакція на "гетеро"
     if "гетеро" in text:
-        update.message.reply_text("👹")
         coins = context.bot_data.setdefault("coins", {})
         coins[username] = max(coins.get(username, 0) - 1, 0)
+        context.bot_data["coins"] = coins
+        update.message.reply_text(f"👹 @{username}, віднято 1 монету за «гетеро»!")
 
     # #️⃣ Хештег +50 монет
-    if (
-        "#" in text
-        and update.message.chat.id == SPECIAL_HASHTAG_CHAT
-    ):
+    if "#" in text and update.message.chat.id == SPECIAL_HASHTAG_CHAT:
         coins = context.bot_data.setdefault("coins", {})
         coins[username] = coins.get(username, 0) + 50
+        context.bot_data["coins"] = coins
+        update.message.reply_text(f"🎉 @{username}, отримано 50 монет за хештег!")
 
 # ---------- GAME ----------
 def start(update, context):
