@@ -57,11 +57,11 @@ def global_text_handler(update, context):
     user = update.message.from_user
     username = user.username or user.first_name
 
-    # 📝 Рахуємо повідомлення ЗАВЖДИ
+    # 📝 Рахуємо повідомлення
     chat_stats = context.chat_data.setdefault("chat_messages", {})
     chat_stats[username] = chat_stats.get(username, 0) + 1
 
-    coins = load_coins()
+    coins = context.bot_data.setdefault("coins", {})
 
     # 👹 Реакція на "гетеро"
     if "гетеро" in text:
@@ -69,13 +69,13 @@ def global_text_handler(update, context):
         save_coins(coins)
 
         update.message.reply_text("👹")
-        update.message.reply_text(f"@{username}, віднято 1 монету за «гетеро»! Тепер у вас {coins[username]} монет.")
+        update.message.reply_text(f"@{username}, віднято 1 монету за «гетеро»!")
 
     # #️⃣ Хештег +50 монет
     if "#" in text and update.message.chat.id == SPECIAL_HASHTAG_CHAT:
         coins[username] = coins.get(username, 0) + 50
         save_coins(coins)
-        update.message.reply_text(f"🎉 @{username}, отримано 50 монет за хештег! Тепер у вас {coins[username]} монет.")
+        update.message.reply_text(f"🎉 @{username}, отримано 50 монет за хештег!")
 
 # ---------- GAME ----------
 def start(update, context):
@@ -117,15 +117,13 @@ def guesser(update, context):
     ):
         update.message.reply_text(f"{user.first_name} вгадав слово!")
 
-        coins = load_coins()
+        coins = context.bot_data.setdefault("coins", {})
         rating = context.chat_data.setdefault("rating", {})
         rating[username] = rating.get(username, 0) + 1
 
         position = sorted(rating.values(), reverse=True).index(rating[username]) + 1
         coins[username] = coins.get(username, 0) + TOP_REWARD.get(position, 0)
         save_coins(coins)
-
-        update.message.reply_text(f"🎉 @{username}, отримано {TOP_REWARD.get(position,0)} монет за вгадане слово! Тепер у вас {coins[username]} монет.")
 
         context.chat_data["winner"] = user.id
         context.chat_data["win_time"] = datetime.now()
@@ -174,7 +172,7 @@ def next_word(update, context):
 def wallet(update, context):
     user = update.message.from_user
     username = user.username or user.first_name
-    coins = load_coins().get(username, 0)
+    coins = context.bot_data.get("coins", {}).get(username, 0)
     update.message.reply_text(f"@{username}, у вас {coins} монет")
 
 # ---------- ADD / DEDUCT THROUGH REPLY ----------
@@ -200,11 +198,11 @@ def add_coins(update, context):
     target_user = update.message.reply_to_message.from_user
     username = target_user.username or target_user.first_name
 
-    coins = load_coins()
+    coins = context.bot_data.setdefault("coins", {})
     coins[username] = coins.get(username, 0) + amount
     save_coins(coins)
 
-    update.message.reply_text(f"✅ @{username} +{amount} монет. Тепер у нього {coins[username]} монет.")
+    update.message.reply_text(f"✅ @{username} +{amount} монет")
 
 def deduct_coins(update, context):
     if not is_admin(update, context):
@@ -228,15 +226,15 @@ def deduct_coins(update, context):
     target_user = update.message.reply_to_message.from_user
     username = target_user.username or target_user.first_name
 
-    coins = load_coins()
+    coins = context.bot_data.setdefault("coins", {})
     coins[username] = max(coins.get(username, 0) - amount, 0)
     save_coins(coins)
 
-    update.message.reply_text(f"✅ @{username} -{amount} монет. Тепер у нього {coins[username]} монет.")
+    update.message.reply_text(f"✅ @{username} -{amount} монет")
 
 # ---------- TOPS ----------
 def top_money(update, context):
-    coins = load_coins()
+    coins = context.bot_data.get("coins", {})
     if not coins:
         update.message.reply_text("Поки що ніхто не має монет.")
         return
@@ -261,13 +259,16 @@ def main():
     updater = Updater(token, use_context=True)
     dp = updater.dispatcher
 
-    # 🌍 ГЛОБАЛЬНІ РЕЧІ — ПЕРШІ
+    # --- Завантажуємо монети на старті ---
+    updater.bot_data["coins"] = load_coins()
+
+    # 🌍 Глобальні обробники
     dp.add_handler(
         MessageHandler(Filters.text & ~Filters.command, global_text_handler),
         group=0
     )
 
-    # 🎮 ГРА
+    # 🎮 Гра
     conv = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
@@ -276,9 +277,7 @@ def main():
                 CallbackQueryHandler(see_word, pattern="^look$"),
                 CallbackQueryHandler(next_word, pattern="^next$")
             ],
-            CHOOSING_PLAYER: [
-                CallbackQueryHandler(next_player)
-            ],
+            CHOOSING_PLAYER: [CallbackQueryHandler(next_player)],
         },
         fallbacks=[CommandHandler("stop", stop)],
         per_user=False
