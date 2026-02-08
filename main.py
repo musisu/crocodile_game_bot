@@ -199,8 +199,7 @@ def main():
     dp.add_handler(CommandHandler('clear_rating', clear_rating))
     dp.add_handler(conv_handler)
 
-    # --- Додаємо наш хендлер для слова "гетеро" ---
-  dp.add_handler(MessageHandler(Filters.text & ~Filters.command, plate_on_malvy))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, plate_on_malvy))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, plate_on_hetero))
   
 
