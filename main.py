@@ -27,7 +27,7 @@ shuffle(WORDS)
 # ---------- GLOBAL DATA ----------
 wallets = {}          # {user_id: coins}
 daily_messages = {}   # {chat_id: {user_id: count}}
-SPECIAL_CHAT_ID = 5214033440  # встав свій id чату
+SPECIAL_CHAT_ID = 5214033440  # твої повідомлення з # дають 50 монет
 SPECIAL_HASH_COINS = 50
 
 # ---------- UTILS ----------
@@ -72,7 +72,7 @@ def guesser(update, context):
     text = update.message.text.lower()
     user = update.message.from_user
 
-    # 🔥 Реакція на ключові слова
+    # 🔥 Реакція на ключові слова у будь-яких чатах
     if "гетеро" in text:
         sub_coins(user.id, 1)
         update.message.reply_text("🍽️ -1 монета за гетеро")
@@ -203,7 +203,7 @@ def main():
     )
     dp.add_handler(conv)
 
-    # Scheduler для щоденного топу за київським часом
+    # Scheduler для щоденного топу о 00:00 Київ
     scheduler = BackgroundScheduler(timezone=pytz.timezone("Europe/Kiev"))
     scheduler.add_job(lambda: send_daily_top(updater), "cron", hour=0, minute=0)
     scheduler.start()
