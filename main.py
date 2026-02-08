@@ -47,16 +47,16 @@ def global_text_handler(update, context):
     chat_stats[username] = chat_stats.get(username, 0) + 1
 
     # 👹 Реакція на "гетеро"
-if "гетеро" in text:
-    coins = context.bot_data.setdefault("coins", {})
-    coins[username] = max(coins.get(username, 0) - 1, 0)
-    context.bot_data["coins"] = coins
+    if "гетеро" in text:
+       coins = context.bot_data.setdefault("coins", {})
+       coins[username] = max(coins.get(username, 0) - 1, 0)
+       context.bot_data["coins"] = coins
 
-    # Відправляємо спочатку стікер
-    update.message.reply_text("👹")  # якщо хочеш справжній стікер, можна використати reply_sticker(sticker_id)
+       # Відправляємо спочатку стікер
+       update.message.reply_text("👹")  # якщо хочеш справжній стікер, можна використати reply_sticker(sticker_id)
 
-    # Потім повідомлення про -1 монету
-    update.message.reply_text(f"@{username}, віднято 1 монету за «гетеро»!")
+       # Потім повідомлення про -1 монету
+       update.message.reply_text(f"@{username}, віднято 1 монету за «гетеро»!")
 
     # #️⃣ Хештег +50 монет
     if "#" in text and update.message.chat.id == SPECIAL_HASHTAG_CHAT:
