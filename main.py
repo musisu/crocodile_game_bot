@@ -62,8 +62,13 @@ def guesser(update, context):
         return GUESSING
 
     if "мальви" in text:
-        update.message.reply_text("👀")
+        update.message.reply_text("🍽️")
         return GUESSING
+        
+    if "кішпари" in text:
+        update.message.reply_text("🍽️")
+        return GUESSING
+
 
     # Основна логіка гри
     if (
@@ -125,7 +130,11 @@ def global_text(update, context):
     if "гетеро" in text:
         update.message.reply_text("🍽️")
     if "мальви" in text:
-        update.message.reply_text("👀")
+        update.message.reply_text("🍽️")
+    if "кішпари" in text:
+        update.message.reply_text("🍽️")
+        return GUESSING
+
 
 
 # ---------- MAIN ----------
