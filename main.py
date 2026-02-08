@@ -18,6 +18,16 @@ GUESSING, CHOOSING_PLAYER = range(2)
 SPECIAL_HASHTAG_CHAT = -5214033440
 TOP_REWARD = {1: 20, 2: 10, 3: 5}
 
+# ---------- CHECK ADMIN ----------
+def is_admin(update, context):
+    try:
+        chat_id = update.effective_chat.id
+        user_id = update.effective_user.id
+        member = context.bot.get_chat_member(chat_id, user_id)
+        return member.status in ("administrator", "creator")
+    except Exception:
+        return False
+        
 # ---------- WORDS ----------
 with open("words.txt", "r", encoding="utf-8") as f:
     WORDS = [w.strip().lower() for w in f.readlines()]
@@ -147,6 +157,62 @@ def wallet(update, context):
     coins = context.bot_data.get("coins", {}).get(username, 0)
     update.message.reply_text(f"@{username}, у вас {coins} монет")
 
+# ---------- ADD / DEDUCT THROUGH REPLY ----------
+def add_coins(update, context):
+    if not is_admin(update, context):
+        update.message.reply_text("⛔ Тільки для адмінів")
+        return
+
+    if not update.message.reply_to_message:
+        update.message.reply_text("❗ Використовуй команду відповіддю на повідомлення")
+        return
+
+    if len(context.args) != 1:
+        update.message.reply_text("❗ Використання: /add 10 (reply)")
+        return
+
+    try:
+        amount = int(context.args[0])
+    except ValueError:
+        update.message.reply_text("❗ Кількість має бути числом")
+        return
+
+    target_user = update.message.reply_to_message.from_user
+    username = target_user.username or target_user.first_name
+
+    coins = context.bot_data.setdefault("coins", {})
+    coins[username] = coins.get(username, 0) + amount
+
+    update.message.reply_text(f"✅ @{username} +{amount} монет")
+
+
+def deduct_coins(update, context):
+    if not is_admin(update, context):
+        update.message.reply_text("⛔ Тільки для адмінів")
+        return
+
+    if not update.message.reply_to_message:
+        update.message.reply_text("❗ Використовуй команду відповіддю на повідомлення")
+        return
+
+    if len(context.args) != 1:
+        update.message.reply_text("❗ Використання: /deduct 5 (reply)")
+        return
+
+    try:
+        amount = int(context.args[0])
+    except ValueError:
+        update.message.reply_text("❗ Кількість має бути числом")
+        return
+
+    target_user = update.message.reply_to_message.from_user
+    username = target_user.username or target_user.first_name
+
+    coins = context.bot_data.setdefault("coins", {})
+    coins[username] = max(coins.get(username, 0) - amount, 0)
+
+    update.message.reply_text(f"✅ @{username} -{amount} монет")
+    
 # ---------- TOPS ----------
 def top_money(update, context):
     coins = context.bot_data.get("coins", {})
@@ -202,6 +268,8 @@ def main():
     dp.add_handler(CommandHandler("wallet", wallet))
     dp.add_handler(CommandHandler("top_money", top_money))
     dp.add_handler(CommandHandler("top", top_messages))
+    dp.add_handler(CommandHandler("add", add_coins))
+    dp.add_handler(CommandHandler("deduct", deduct_coins))
 
     updater.start_polling()
     updater.idle()
