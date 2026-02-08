@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
@@ -12,13 +10,12 @@ from telegram.ext import (
     ConversationHandler, CallbackQueryHandler
 )
 import logging
-import pytz
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 GUESSING, CHOOSING_PLAYER = range(2)
-SPECIAL_HASHTAG_CHAT = -5214033440  # Твій конкретний чат для #
+SPECIAL_HASHTAG_CHAT = -5214033440  # конкретний чат для #
 TOP_REWARD = {1: 20, 2: 10, 3: 5}
 
 # ---------- WORDS ----------
@@ -56,12 +53,18 @@ def stop(update, context):
     update.message.reply_text("Гру зупинено")
     return ConversationHandler.END
 
-def plate_on_hetero(update, context):
+
+def guesser(update, context):
     text = update.message.text.lower()
+    user = update.message.from_user
+
+    # Реакція на "гетеро" та "мальви"
     if "гетеро" in text:
         update.message.reply_text("🍽️")
+    if "мальви" in text:
+        update.message.reply_text("👀")
 
-    # Основна логіка гри
+    # Логіка крокодила
     if (
         context.chat_data.get("is_playing")
         and user.id != context.chat_data.get("current_player")
@@ -69,14 +72,15 @@ def plate_on_hetero(update, context):
     ):
         update.message.reply_text(f"{user.first_name} вгадав слово!")
 
-        # Нарахування монет за виграш
-        coins = context.bot_data.setdefault('coins', {})
-        # Визначаємо рейтинг у чаті
+        username = user.username or user.first_name
+        # Рейтинг у чаті
         rating = context.chat_data.setdefault('rating', {})
         rating[username] = rating.get(username, 0) + 1
         context.chat_data['rating'] = rating
 
-        # Перше, друге, третє місце для монет
+        # Монети
+        coins = context.bot_data.setdefault('coins', {})
+        # визначення позиції
         position = sorted(rating.values(), reverse=True).index(rating[username]) + 1
         coins[username] = coins.get(username, 0) + TOP_REWARD.get(position, 0)
         context.bot_data['coins'] = coins
@@ -127,7 +131,7 @@ def next_word(update, context):
     return GUESSING
 
 
-# ---------- COINS HANDLERS ----------
+# ---------- COINS ----------
 def wallet(update, context):
     user = update.message.from_user
     username = user.username or user.first_name
@@ -178,14 +182,24 @@ def hashtag_coins(update, context):
 
 
 # ---------- TOP ----------
-def top(update, context):
+def top_money(update, context):
     coins = context.bot_data.get('coins', {})
     if not coins:
         update.message.reply_text("Поки що ніхто не має монет.")
         return
-    top_list = sorted(coins.items(), key=lambda x: x[1], reverse=True)[:10]
+    top_list = sorted(coins.items(), key=lambda x: x[1], reverse=True)[:5]
     msg = "\n".join([f"{i+1}. @{user}: {amount} монет" for i, (user, amount) in enumerate(top_list)])
-    update.message.reply_text(f"💰 Топ користувачів за монетами:\n{msg}")
+    update.message.reply_text(f"💰 Топ 5 за монетами:\n{msg}")
+
+
+def top_messages(update, context):
+    chat_rating = context.chat_data.get('rating', {})
+    if not chat_rating:
+        update.message.reply_text("Поки що немає активності у чаті.")
+        return
+    top_list = sorted(chat_rating.items(), key=lambda x: x[1], reverse=True)[:5]
+    msg = "\n".join([f"{i+1}. {user}: {count} повідомлень" for i, (user, count) in enumerate(top_list)])
+    update.message.reply_text(f"📊 Топ 5 за повідомленнями:\n{msg}")
 
 
 # ---------- MAIN ----------
@@ -218,11 +232,13 @@ def main():
     dp.add_handler(CommandHandler("deduct", deduct_coins))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, hashtag_coins))
 
-    # Топ
-    dp.add_handler(CommandHandler("top", top))
+    # Топи
+    dp.add_handler(CommandHandler("top_money", top_money))
+    dp.add_handler(CommandHandler("top", top_messages))
 
-    # Відповіді
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, plate_on_hetero))
+    # Реакції
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, guesser))  # для крокодила
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, plate_on_hetero))  # "гетеро" / "мальви"
 
     updater.start_polling()
     updater.idle()
