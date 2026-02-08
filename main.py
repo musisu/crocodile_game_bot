@@ -5,6 +5,7 @@ import os
 import json
 from random import shuffle, choice
 from datetime import datetime
+import pytz
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Updater, CommandHandler, MessageHandler, Filters,
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 GUESSING, CHOOSING_PLAYER = range(2)
 STATS_FILE = "daily_stats.json"
 
-# ---------- CHAT-LIMITED WORDS ----------
+# ---------- WORDS ----------
 WORDS = []
 with open("words.txt", "r", encoding="utf-8") as f:
     WORDS = [w.strip().lower() for w in f.readlines()]
@@ -37,7 +38,7 @@ def save_stats(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 def check_new_day(chat_data):
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(pytz.timezone("Europe/Kiev")).strftime("%Y-%m-%d")
     if chat_data.get("date") != today:
         chat_data["date"] = today
         chat_data["messages"] = {}
@@ -49,7 +50,7 @@ def count_message(update):
     data = load_stats()
 
     if chat_id not in data["chats"]:
-        data["chats"][chat_id] = {"date": datetime.now().strftime("%Y-%m-%d"), "messages": {}}
+        data["chats"][chat_id] = {"date": datetime.now(pytz.timezone("Europe/Kiev")).strftime("%Y-%m-%d"), "messages": {}}
 
     chat_data = check_new_day(data["chats"][chat_id])
     uid = str(user.id)
@@ -74,7 +75,7 @@ def show_top(update, context):
 def send_daily_top(bot_token):
     bot = Updater(bot_token, use_context=True).bot
     data = load_stats()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(pytz.timezone("Europe/Kiev")).strftime("%Y-%m-%d")
     for chat_id, chat_data in data["chats"].items():
         if not chat_data["messages"]:
             continue
@@ -83,7 +84,7 @@ def send_daily_top(bot_token):
         for i, u in enumerate(users[:10], 1):
             text += f"{i}. {u['name']} — {u['count']} повідомлень\n"
         bot.send_message(chat_id=int(chat_id), text=text)
-        # Скидаємо на новий день
+        # Очищаємо статистику на новий день
         data["chats"][chat_id] = {"date": today, "messages": {}}
     save_stats(data)
 
@@ -117,7 +118,6 @@ def guesser(update, context):
     text = update.message.text.lower()
     user = update.message.from_user
 
-    # 🔥 Ключові слова
     if "гетеро" in text:
         update.message.reply_text("🍽️")
         return GUESSING
@@ -190,6 +190,7 @@ def main():
     dp = updater.dispatcher
 
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, global_text))
+
     conv = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
@@ -210,7 +211,13 @@ def main():
 
     # ---------- SCHEDULER ----------
     scheduler = BackgroundScheduler()
-    scheduler.add_job(lambda: send_daily_top(token), trigger="cron", hour=0, minute=0)
+    scheduler.add_job(
+        lambda: send_daily_top(token),
+        trigger="cron",
+        hour=0,
+        minute=0,
+        timezone=pytz.timezone("Europe/Kiev")
+    )
     scheduler.start()
 
     updater.start_polling()
