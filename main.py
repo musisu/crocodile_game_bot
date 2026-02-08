@@ -10,6 +10,8 @@ from telegram.ext import (
     ConversationHandler, CallbackQueryHandler
 )
 import logging
+from apscheduler.schedulers.background import BackgroundScheduler
+import pytz
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,7 +27,7 @@ shuffle(WORDS)
 # ---------- GLOBAL DATA ----------
 wallets = {}          # {user_id: coins}
 daily_messages = {}   # {chat_id: {user_id: count}}
-SPECIAL_CHAT_ID = -5214033440  # сюди вставляєш id чату для # нарахувань
+SPECIAL_CHAT_ID = -1001234567890  # встав свій id чату
 SPECIAL_HASH_COINS = 50
 
 # ---------- UTILS ----------
@@ -70,19 +72,19 @@ def guesser(update, context):
     text = update.message.text.lower()
     user = update.message.from_user
 
-    # Реакція на ключові слова
+    # 🔥 Реакція на ключові слова
     if "гетеро" in text:
         sub_coins(user.id, 1)
-        update.message.reply_text("ШТРАФ! -1 монета за пропаганду 👹")
+        update.message.reply_text("🍽️ -1 монета за гетеро")
         return GUESSING
     if "мальви" in text:
-        update.message.reply_text("🍽️")
+        update.message.reply_text("👀")
         return GUESSING
     if "кішпари" in text:
         update.message.reply_text("🍽️")
         return GUESSING
 
-    # Логіка гри
+    # Основна логіка гри
     if (
         context.chat_data.get("is_playing")
         and user.id != context.chat_data.get("current_player")
@@ -161,6 +163,7 @@ def check_special_chat_message(update, context):
 
 # ---------- DAILY TOP ----------
 def send_daily_top(context):
+    bot = context.bot
     for chat_id, users in daily_messages.items():
         sorted_users = sorted(users.items(), key=lambda x: x[1], reverse=True)
         top_text = "🏆 Топ за сьогодні:\n"
@@ -168,9 +171,8 @@ def send_daily_top(context):
             coins_reward = [20, 10, 5][i]
             add_coins(user_id, coins_reward)
             top_text += f"{i+1}. [User](tg://user?id={user_id}): {count} повідомлень (+{coins_reward} монет)\n"
-        context.bot.send_message(chat_id=chat_id, text=top_text, parse_mode="Markdown")
+        bot.send_message(chat_id=chat_id, text=top_text, parse_mode="Markdown")
 
-    # Очищуємо лічильники після топу
     daily_messages.clear()
 
 # ---------- MAIN ----------
@@ -201,11 +203,9 @@ def main():
     )
     dp.add_handler(conv)
 
-    # Scheduler для щоденного топу
-    from apscheduler.schedulers.background import BackgroundScheduler
-    import pytz
-    scheduler = BackgroundScheduler(timezone=pytz.UTC)
-    scheduler.add_job(lambda: send_daily_top(updater), "cron", hour=0, minute=0)  # о 00:00 UTC
+    # Scheduler для щоденного топу за київським часом
+    scheduler = BackgroundScheduler(timezone=pytz.timezone("Europe/Kiev"))
+    scheduler.add_job(lambda: send_daily_top(updater), "cron", hour=0, minute=0)
     scheduler.start()
 
     updater.start_polling()
