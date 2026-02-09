@@ -3,6 +3,7 @@
 
 import os
 import json
+import random
 from random import shuffle, choice
 from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -202,6 +203,84 @@ def deduct_coins(update, context):
     save_coins()
     update.message.reply_text(f"✅ @{username} -{amount}")
 
+def gift_coins(update, context):
+    if not update.message.reply_to_message or len(context.args) != 1:
+        return update.message.reply_text("❗ Використання: /gift 10 (reply)")
+
+    try:
+        amount = int(context.args[0])
+        if amount <= 0:
+            raise ValueError
+    except ValueError:
+        return update.message.reply_text("❗ Кількість має бути додатнім числом")
+
+    from_user = update.message.from_user
+    to_user = update.message.reply_to_message.from_user
+
+    from_name = from_user.username or from_user.first_name
+    to_name = to_user.username or to_user.first_name
+
+    if COINS.get(from_name, 0) < amount:
+        return update.message.reply_text("💸 Недостатньо монет")
+
+    COINS[from_name] -= amount
+    COINS[to_name] = COINS.get(to_name, 0) + amount
+    save_coins()
+
+    update.message.reply_text(
+        f"🎁 @{from_name} подарував @{to_name} {amount} монет"
+    )
+
+def steal_coins(update, context):
+    if not update.message.reply_to_message:
+        return update.message.reply_text("❗ Використовуй /steal відповіддю")
+
+    thief = update.message.from_user
+    victim = update.message.reply_to_message.from_user
+
+    thief_name = thief.username or thief.first_name
+    victim_name = victim.username or victim.first_name
+
+    if thief.id == victim.id:
+        return update.message.reply_text("🤨 Сам у себе красти не можна")
+
+    # поточний шанс
+    chance = STEAL_CHANCE.get(thief_name, STEAL_BASE_CHANCE)
+
+    # перевірка
+    if random.random() < chance:
+        fine = 50
+        COINS[thief_name] = max(COINS.get(thief_name, 0) - fine, 0)
+
+        # 🔥 скид шансів
+        STEAL_CHANCE[thief_name] = STEAL_BASE_CHANCE
+        save_coins()
+
+        return update.message.reply_text(
+            f"🚓 @{thief_name} попався!\n"
+            f"💸 Штраф {fine} монет\n"
+            f"🔄 Шанс скинуто до 40%"
+        )
+
+    # успішна крадіжка
+    steal_amount = random.randint(0, 20)
+    victim_balance = COINS.get(victim_name, 0)
+    real_amount = min(steal_amount, victim_balance)
+
+    COINS[victim_name] = victim_balance - real_amount
+    COINS[thief_name] = COINS.get(thief_name, 0) + real_amount
+
+    # 📈 підвищуємо шанс
+    new_chance = min(chance + STEAL_STEP, STEAL_MAX_CHANCE)
+    STEAL_CHANCE[thief_name] = new_chance
+
+    save_coins()
+
+    update.message.reply_text(
+        f"🕵️ @{thief_name} поцупив {real_amount} монет у @{victim_name}!\n"
+        f"⚠️ Новий шанс попастися: {int(new_chance * 100)}%"
+    )
+
 def top_money(update, context):
     if not COINS:
         return update.message.reply_text("Поки що немає монет")
@@ -248,6 +327,8 @@ def main():
     dp.add_handler(CommandHandler("top", top_messages))
     dp.add_handler(CommandHandler("add", add_coins))
     dp.add_handler(CommandHandler("deduct", deduct_coins))
+    dp.add_handler(CommandHandler("gift", gift_coins))
+    dp.add_handler(CommandHandler("steal", steal_coins))
 
     updater.start_polling()
     updater.idle()
