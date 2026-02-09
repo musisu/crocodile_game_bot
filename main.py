@@ -13,7 +13,8 @@ from telegram.ext import (
 import logging
 
 # ---------- JSON для монет ----------
-COINS_FILE = "coins.json"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+COINS_FILE = os.path.join(BASE_DIR, "coins.json")
 
 def load_coins():
     try:
