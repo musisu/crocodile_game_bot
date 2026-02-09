@@ -31,7 +31,13 @@ STEAL_CHANCE = {}
 DATA_FILE = "coins.json"  # залишаємо старий файл
 COINS = {}                 # залишаємо баланс гравців
 MARRIAGES = {}             # нове для шлюбів
-INVENTORY = {}             # нове для каблучок та іншого
+INVENTORY = {}  
+# структура:
+# INVENTORY = {
+#   "username": {
+#       "rings": ["silver", "gold"]
+#   }
+# }
 
 RINGS = {        # каблучки і їх ціни
     "silver": 200,
@@ -59,6 +65,41 @@ def save_data():
             "marriages": MARRIAGES,
             "inventory": INVENTORY
         }, f, ensure_ascii=False, indent=2)
+
+def is_married(username):
+    return username in MARRIAGES
+
+
+def get_shared_owner(username):
+    if not is_married(username):
+        return None
+    return username  # будь-хто з пари — ключ
+
+
+def get_balance(username):
+    if is_married(username):
+        return MARRIAGES[username]["shared"]
+    return COINS.get(username, 0)
+
+
+def spend_coins(username, amount):
+    if is_married(username):
+        if MARRIAGES[username]["shared"] < amount:
+            return False
+        MARRIAGES[username]["shared"] -= amount
+        return True
+    else:
+        if COINS.get(username, 0) < amount:
+            return False
+        COINS[username] -= amount
+        return True
+
+
+def add_coins_to_user(username, amount):
+    if is_married(username):
+        MARRIAGES[username]["shared"] += amount
+    else:
+        COINS[username] = COINS.get(username, 0) + amount
 
 # ================== ADMIN CHECK ==================
 def is_admin(update, context):
@@ -337,7 +378,9 @@ def top_messages(update, context):
 
 def buy_ring(update, context):
     if len(context.args) != 1:
-        return update.message.reply_text(f"❗ Використання: /buy_ring <тип> (доступні: {', '.join(RINGS.keys())})")
+        return update.message.reply_text(
+            f"❗ /buy_ring <тип> | Доступні: {', '.join(RINGS.keys())}"
+        )
 
     ring = context.args[0].lower()
     if ring not in RINGS:
@@ -346,74 +389,81 @@ def buy_ring(update, context):
     username = update.message.from_user.username or update.message.from_user.first_name
     price = RINGS[ring]
 
-    if COINS.get(username, 0) < price:
-        return update.message.reply_text(f"💸 Недостатньо монет для покупки каблучки {ring} ({price} монет)")
+    if not spend_coins(username, price):
+        return update.message.reply_text("💸 Недостатньо коштів")
 
-    COINS[username] -= price
-    INVENTORY[username] = ring
+    INVENTORY.setdefault(username, {"rings": []})
+    INVENTORY[username]["rings"].append(ring)
+
     save_data()
-    update.message.reply_text(f"💍 @{username} придбав каблучку {ring} за {price} монет")
-
+    update.message.reply_text(f"💍 @{username} купив каблучку {ring}")
 def marry(update, context):
     if not update.message.reply_to_message:
-        return update.message.reply_text("❗ Використання: /marry (відповіддю на повідомлення партнера)")
+        return update.message.reply_text("❗ /marry у відповідь на партнера")
 
-    partner = update.message.reply_to_message.from_user
     user = update.message.from_user
-    user_name = user.username or user.first_name
-    partner_name = partner.username or partner.first_name
+    partner = update.message.reply_to_message.from_user
 
-    if user_name in MARRIAGES or partner_name in MARRIAGES:
-        return update.message.reply_text("💔 Хтось вже одружений")
+    u = user.username or user.first_name
+    p = partner.username or partner.first_name
 
-    if user_name not in INVENTORY:
-        return update.message.reply_text("❗ Купи каблучку перед одруженням (/buy_ring)")
+    if u in MARRIAGES or p in MARRIAGES:
+        return update.message.reply_text("💔 Хтось уже в шлюбі")
 
-    if COINS.get(user_name, 0) < 500:
-        return update.message.reply_text("💸 Недостатньо монет для одруження (500 + каблучка)")
+    rings = INVENTORY.get(u, {}).get("rings", [])
+    if not rings:
+        return update.message.reply_text("💍 У тебе немає каблучки")
 
-    COINS[user_name] -= 500
-    # створюємо спільний баланс
-    shared_balance = COINS.get(user_name, 0) + COINS.get(partner_name, 0)
-    COINS[user_name] = 0
-    COINS[partner_name] = 0
+    if not spend_coins(u, 500):
+        return update.message.reply_text("💸 Потрібно 500 монет")
 
-    MARRIAGES[user_name] = {"partner": partner_name, "shared": shared_balance}
-    MARRIAGES[partner_name] = {"partner": user_name, "shared": shared_balance}
+    ring = rings.pop(0)  # перша каблучка
+    INVENTORY.setdefault(p, {"rings": []})
+    INVENTORY[p]["rings"].append(ring)
 
-    save_data()
-    update.message.reply_text(f"💒 @{user_name} та @{partner_name} одружились! Спільний баланс: {shared_balance} монет")
+    shared = get_balance(u) + get_balance(p)
 
-def divorce(update, context):
-    username = update.message.from_user.username or update.message.from_user.first_name
+    COINS[u] = 0
+    COINS[p] = 0
 
-    if username not in MARRIAGES:
-        return update.message.reply_text("❗ Ти не в шлюбі")
-
-    partner_name = MARRIAGES[username]["partner"]
-    shared_balance = MARRIAGES[username]["shared"]
-
-    if COINS.get(username, 0) < 500:
-        return update.message.reply_text("💸 Недостатньо монет для розлучення (500)")
-
-    COINS[username] -= 500
-
-    # ділимо спільний баланс випадково
-    first_share = random.randint(0, shared_balance)
-    second_share = shared_balance - first_share
-
-    COINS[username] = first_share
-    COINS[partner_name] = second_share
-
-    # видаляємо шлюб та інвентар
-    MARRIAGES.pop(username, None)
-    MARRIAGES.pop(partner_name, None)
+    MARRIAGES[u] = {"partner": p, "shared": shared}
+    MARRIAGES[p] = {"partner": u, "shared": shared}
 
     save_data()
     update.message.reply_text(
-        f"💔 @{username} та @{partner_name} розлучились!\n"
-        f"💰 Баланс @{username}: {first_share}\n"
-        f"💰 Баланс @{partner_name}: {second_share}"
+        f"💒 @{u} і @{p} одружились!\n"
+        f"💍 Каблучка тепер у @{p}\n"
+        f"💰 Спільний баланс: {shared}"
+    )
+
+def divorce(update, context):
+    u = update.message.from_user.username or update.message.from_user.first_name
+
+    if u not in MARRIAGES:
+        return update.message.reply_text("❗ Ти не в шлюбі")
+
+    p = MARRIAGES[u]["partner"]
+    shared = MARRIAGES[u]["shared"]
+
+    if shared < 500:
+        return update.message.reply_text("💸 Недостатньо коштів для розлучення")
+
+    shared -= 500
+
+    a = random.randint(0, shared)
+    b = shared - a
+
+    COINS[u] = a
+    COINS[p] = b
+
+    MARRIAGES.pop(u)
+    MARRIAGES.pop(p)
+
+    save_data()
+    update.message.reply_text(
+        f"💔 Розлучення завершено\n"
+        f"💰 @{u}: {a}\n"
+        f"💰 @{p}: {b}"
     )
     
 # ================== MAIN ==================
