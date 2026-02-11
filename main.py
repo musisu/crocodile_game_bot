@@ -24,8 +24,10 @@ TOP_REWARD = {1: 20, 2: 10, 3: 5}
 STEAL_BASE_CHANCE = 0.4
 STEAL_STEP = 0.2
 STEAL_MAX_CHANCE = 0.9
+DEPOSIT_INTEREST = 0.05
 BANK_ROBBERY_CHANCE = 0.05
-BANK_ZERO_CHANCE = 0.7
+BANK_ROBBERY_LOSS_CHANCE = 0.7
+WITHDRAWAL_DAYS = [0, 3]  # 0 = понеділок, 3 = четвер
 DATA_FILE = "coins.json"
 
 # ================== STORAGE ==================
@@ -95,6 +97,69 @@ def global_text_handler(update, context):
         COINS[username] = COINS.get(username, 0) + 50
         save_data()
         update.message.reply_text(f"🎉 @{username}, +50 монет")
+        
+#=================DEPOSITS===================
+
+def deposit_balance(update, context):
+    username = update.message.from_user.username or update.message.from_user.first_name
+    balance = DEPOSITS.get(username, 0)
+    update.message.reply_text(f"🏦 @{username}, ваш депозит: {balance} монет")
+
+def deposit_add(update, context):
+    username = update.message.from_user.username or update.message.from_user.first_name
+
+    if len(context.args) != 1:
+        return update.message.reply_text("❗ Використання: /deposit_add <сума>")
+
+    try:
+        amount = int(context.args[0])
+        if amount <= 0:
+            raise ValueError
+    except ValueError:
+        return update.message.reply_text("❗ Сума має бути додатнім числом")
+
+    if COINS.get(username, 0) < amount:
+        return update.message.reply_text("💸 Недостатньо монет для депозиту")
+
+    COINS[username] -= amount
+    DEPOSITS[username] = DEPOSITS.get(username, 0) + amount
+    save_data()
+    update.message.reply_text(f"🏦 @{username} додав {amount} монет на депозит")
+
+def deposit_withdraw(update, context):
+    username = update.message.from_user.username or update.message.from_user.first_name
+    today = datetime.today().weekday()
+
+    if today not in WITHDRAWAL_DAYS:
+        return update.message.reply_text("❌ Вивід депозиту доступний тільки в понеділок та четвер")
+
+    if username not in DEPOSITS or DEPOSITS[username] == 0:
+        return update.message.reply_text("❌ У вас немає депозиту")
+
+    # шанс пограбування
+    if random.random() < BANK_ROBBERY_CHANCE:
+        robbed = False
+        for user, bal in DEPOSITS.items():
+            if bal > 0 and random.random() < BANK_ROBBERY_LOSS_CHANCE:
+                DEPOSITS[user] = 0
+                robbed = True
+        save_data()
+        if robbed:
+            return update.message.reply_text("💥 Банк пограбували! Частина депозитів обнулилася")
+
+    amount = DEPOSITS.get(username, 0)
+    COINS[username] = COINS.get(username, 0) + amount
+    DEPOSITS[username] = 0
+    save_data()
+    update.message.reply_text(f"🏦 @{username} зняв {amount} монет з депозиту")
+
+def deposit_daily_interest():
+    """Функція для щоденного нарахування 5% від депозиту"""
+    for user, bal in DEPOSITS.items():
+        if bal > 0:
+            interest = int(bal * DEPOSIT_INTEREST)
+            DEPOSITS[user] += interest
+    save_data()
 
 # ================== UTILITY ==================
 def is_married(username):
@@ -423,6 +488,9 @@ def main():
     dp.add_handler(CommandHandler("buy_ring", buy_ring))
     dp.add_handler(CommandHandler("marry", marry))
     dp.add_handler(CommandHandler("divorce", divorce))
+    dp.add_handler(CommandHandler("deposit_balance", deposit_balance))
+    dp.add_handler(CommandHandler("deposit_add", deposit_add))
+    dp.add_handler(CommandHandler("deposit_withdraw", deposit_withdraw))
     dp.add_handler(CallbackQueryHandler(marriage_callback, pattern="^marry_"))
     dp.add_handler(
     MessageHandler(Filters.text & ~Filters.command, global_text_handler),
