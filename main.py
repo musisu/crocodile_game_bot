@@ -370,6 +370,14 @@ def divorce(update, context):
     save_data()
     update.message.reply_text(f"💔 Розлучення завершено\n💰 @{username}: {a}\n💰 @{partner}: {b}")
 
+def top_money(update, context):
+    if not COINS:
+        return update.message.reply_text("Поки що немає монет")
+
+    top = sorted(COINS.items(), key=lambda x: x[1], reverse=True)[:5]
+    msg = "\n".join(f"{i+1}. @{u}: {c}" for i, (u, c) in enumerate(top))
+    update.message.reply_text(f"💰 Топ монет:\n{msg}")
+
 # ================== MAIN ==================
 def main():
     load_data()
