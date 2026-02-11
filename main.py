@@ -127,16 +127,16 @@ def global_text_handler(update, context):
         except Exception as e:
             print(f"Помилка при надсиланні в лог-чат: {e}")
 
-if "#" in text and update.message.chat.id == SPECIAL_HASHTAG_CHAT:
+    if "#" in text and update.message.chat.id == SPECIAL_HASHTAG_CHAT:
     username = update.message.from_user.username or update.message.from_user.first_name
 
     # Іменна статистика
-    for period in ["daily", "weekly", "monthly", "all_time"]:
-        POST_STATS.setdefault(period, {})
-        POST_STATS[period][username] = POST_STATS[period].get(username, 0) + 1
-        POST_COUNTS[period] += 1
+        for period in ["daily", "weekly", "monthly", "all_time"]:
+            POST_STATS.setdefault(period, {})
+            POST_STATS[period][username] = POST_STATS[period].get(username, 0) + 1
+            POST_COUNTS[period] += 1
 
-    save_data()  # зберігаємо статистику разом із монетами та іншими даними
+        save_data()  # зберігаємо статистику разом із монетами та іншими даними
     
 #=================DEPOSITS===================
 
