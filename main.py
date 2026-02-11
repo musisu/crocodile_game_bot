@@ -113,18 +113,14 @@ def global_text_handler(update, context):
         update.message.reply_text("👹")
         update.message.reply_text(f"@{username}, -1 монета")
 
-    # #️⃣ нагорода за хештег і статистика постів
-    if "#" in update.message.text:
-        username = update.message.from_user.username or update.message.from_user.first_name
-
-    # Монети лише у потрібному чаті
-    if update.message.chat.id == SPECIAL_HASHTAG_CHAT:
+     # #️⃣ Нагорода за хештег і статистика постів
+    if "#" in text and update.message.chat.id == SPECIAL_HASHTAG_CHAT:
+        # Нагородження монетами
         COINS[username] = COINS.get(username, 0) + HASHTAG_REWARD
-        save_data()
         try:
             context.bot.send_message(
                 chat_id=HASHTAG_LOG_CHAT,
-                text=f"🎉 @{username} отримав(ла) {HASHTAG_REWARD} монет за хештег!"
+                text=f"🎉 @{username} отримав(ла) {HASHTAG_REWARD} монет за пост!"
             )
         except Exception as e:
             print(f"Помилка при надсиланні в лог-чат: {e}")
