@@ -114,7 +114,7 @@ def global_text_handler(update, context):
         update.message.reply_text(f"@{username}, -1 монета")
 
     # #️⃣ нагорода за хештег і статистика постів
-if "#" in update.message.text:
+    if "#" in update.message.text:
     username = update.message.from_user.username or update.message.from_user.first_name
 
     # Монети лише у потрібному чаті
