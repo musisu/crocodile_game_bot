@@ -113,12 +113,13 @@ def global_text_handler(update, context):
         update.message.reply_text("👹")
         update.message.reply_text(f"@{username}, -1 монета")
 
-    # #️⃣ нагорода за хештег
+    # #️⃣ нагорода за хештег і статистика постів
     if "#" in text and update.message.chat.id == SPECIAL_HASHTAG_CHAT:
+        # Нагорода монет
         COINS[username] = COINS.get(username, 0) + HASHTAG_REWARD
         save_data()
 
-        # повідомлення в інший чат
+        # Повідомлення в інший чат
         try:
             context.bot.send_message(
                 chat_id=HASHTAG_LOG_CHAT,
@@ -127,16 +128,14 @@ def global_text_handler(update, context):
         except Exception as e:
             print(f"Помилка при надсиланні в лог-чат: {e}")
 
-    if "#" in text and update.message.chat.id == SPECIAL_HASHTAG_CHAT:
-    username = update.message.from_user.username or update.message.from_user.first_name
-
-    # Іменна статистика
+        # Іменна статистика постів
         for period in ["daily", "weekly", "monthly", "all_time"]:
             POST_STATS.setdefault(period, {})
             POST_STATS[period][username] = POST_STATS[period].get(username, 0) + 1
             POST_COUNTS[period] += 1
 
-        save_data()  # зберігаємо статистику разом із монетами та іншими даними
+        # Збереження всіх даних
+        save_data()
     
 #=================DEPOSITS===================
 
