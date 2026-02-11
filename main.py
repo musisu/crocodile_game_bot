@@ -115,7 +115,7 @@ def global_text_handler(update, context):
 
     # #️⃣ нагорода за хештег і статистика постів
     if "#" in update.message.text:
-    username = update.message.from_user.username or update.message.from_user.first_name
+        username = update.message.from_user.username or update.message.from_user.first_name
 
     # Монети лише у потрібному чаті
     if update.message.chat.id == SPECIAL_HASHTAG_CHAT:
