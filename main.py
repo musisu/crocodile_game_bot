@@ -7,11 +7,13 @@ import random
 from random import shuffle, choice
 from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from datetime import time
 from telegram.ext import (
     Updater, CommandHandler, MessageHandler, Filters,
     ConversationHandler, CallbackQueryHandler
 )
 import logging
+import pytz
 
 # ================== LOGGING ==================
 logging.basicConfig(level=logging.INFO)
@@ -19,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 # ================== CONSTANTS ==================
 GUESSING, CHOOSING_PLAYER = range(2)
-SPECIAL_HASHTAG_CHAT = -1002250842606  # чат, де активні хештеги
-HASHTAG_LOG_CHAT = -1002408227652      # чат, куди слати повідомлення про бонус
+SPECIAL_HASHTAG_CHAT = 5214033440  # чат, де активні хештеги
+HASHTAG_LOG_CHAT = 5214033440      # чат, куди слати повідомлення про бонус
 HASHTAG_REWARD = 50
 TOP_REWARD = {1: 20, 2: 10, 3: 5}
 STEAL_BASE_CHANCE = 0.4
@@ -29,6 +31,7 @@ STEAL_MAX_CHANCE = 0.9
 DEPOSIT_INTEREST = 0.05
 BANK_ROBBERY_CHANCE = 0.05
 BANK_ROBBERY_LOSS_CHANCE = 0.5
+KYIV_TZ = pytz.timezone("Europe/Kiev")
 WITHDRAWAL_DAYS = [0, 3]  # 0 = понеділок, 3 = четвер
 DATA_FILE = "coins.json"
 
@@ -40,6 +43,22 @@ PROPOSALS = {}
 PENDING_MARRIAGES = {}
 DEPOSITS = {}
 STEAL_CHANCE = {}
+
+# Структура для підрахунку постів
+POST_STATS = {
+    "daily": {},    # {"username": count}
+    "weekly": {},
+    "monthly": {},
+    "all_time": {}
+}
+
+# Загальна кількість постів
+POST_COUNTS = {
+    "daily": 0,
+    "weekly": 0,
+    "monthly": 0,
+    "all_time": 0
+}
 
 RINGS = {
     "silver": 200,
@@ -107,6 +126,18 @@ def global_text_handler(update, context):
             )
         except Exception as e:
             print(f"Помилка при надсиланні в лог-чат: {e}")
+
+if "#" in text and update.message.chat.id == SPECIAL_HASHTAG_CHAT:
+    username = update.message.from_user.username or update.message.from_user.first_name
+
+    # Іменна статистика
+    for period in ["daily", "weekly", "monthly", "all_time"]:
+        POST_STATS.setdefault(period, {})
+        POST_STATS[period][username] = POST_STATS[period].get(username, 0) + 1
+        POST_COUNTS[period] += 1
+
+    save_data()  # зберігаємо статистику разом із монетами та іншими даними
+    
 #=================DEPOSITS===================
 
 def deposit_balance(update, context):
@@ -472,6 +503,46 @@ def top_messages(update, context):
     msg = "\n".join(f"{i+1}. {u}: {c}" for i, (u, c) in enumerate(top))
     update.message.reply_text(f"📝 Топ повідомлень:\n{msg}")
 
+def post_stats_report(update, context):
+    username = update.message.from_user.username or update.message.from_user.first_name
+
+    msg = "📊 Статистика постів:\n\n"
+    for period in ["daily", "weekly", "monthly", "all_time"]:
+        top_users = sorted(POST_STATS.get(period, {}).items(), key=lambda x: x[1], reverse=True)[:5]
+        top_text = "\n".join([f"{i+1}. @{u}: {c}" for i, (u, c) in enumerate(top_users)]) or "немає постів"
+        total = POST_COUNTS.get(period, 0)
+        msg += f"📅 {period.capitalize()} — всього постів: {total}\n{top_text}\n\n"
+
+    update.message.reply_text(msg)
+
+#===================STATS=====================
+
+def send_daily_stats(context):
+    msg = format_post_stats("daily")
+    context.bot.send_message(HASHTAG_LOG_CHAT, msg)
+    # обнуляємо лічильку на новий день
+    POST_STATS["daily"] = {}
+    POST_COUNTS["daily"] = 0
+
+def send_weekly_stats(context):
+    msg = format_post_stats("weekly")
+    context.bot.send_message(HASHTAG_LOG_CHAT, msg)
+    POST_STATS["weekly"] = {}
+    POST_COUNTS["weekly"] = 0
+
+def send_monthly_stats(context):
+    msg = format_post_stats("monthly")
+    context.bot.send_message(HASHTAG_LOG_CHAT, msg)
+    POST_STATS["monthly"] = {}
+    POST_COUNTS["monthly"] = 0
+
+def format_post_stats(period):
+    top_users = sorted(POST_STATS.get(period, {}).items(), key=lambda x: x[1], reverse=True)[:5]
+    top_text = "\n".join([f"{i+1}. @{u}: {c}" for i, (u, c) in enumerate(top_users)]) or "немає постів"
+    total = POST_COUNTS.get(period, 0)
+    msg = f"📊 Статистика постів ({period.capitalize()}):\n\n{top_text}\n\nВсього постів: {total}"
+    return msg
+
 # ================== MAIN ==================
 def main():
     load_data()
@@ -497,6 +568,22 @@ def main():
     )
     dp.add_handler(conv, group=1)
 
+    from datetime import timedelta
+
+    # ... після ініціалізації updater
+    job_queue = updater.job_queue
+
+    # Щодня о 00:00 київського часу
+    job_queue.run_daily(send_daily_stats, time=time(hour=0, minute=0, tzinfo=KYIV_TZ))
+
+    # Щопонеділка о 06:00 київського часу
+    job_queue.run_daily(send_weekly_stats, time=time(hour=6, minute=0, tzinfo=KYIV_TZ), days=(0,))  # Monday=0
+
+    # Першого числа місяця о 10:00 київського часу
+    job_queue.run_daily(send_monthly_stats, time=time(hour=10, minute=0, tzinfo=KYIV_TZ), days=(1,))
+
+    job_queue.run_daily(deposit_daily_interest, time=time(hour=0, minute=0, tzinfo=KYIV_TZ))
+
     # Commands
     dp.add_handler(CommandHandler("wallet", wallet))
     dp.add_handler(CommandHandler("top_money", top_money))
@@ -512,10 +599,7 @@ def main():
     dp.add_handler(CommandHandler("deposit_add", deposit_add))
     dp.add_handler(CommandHandler("deposit_withdraw", deposit_withdraw))
     dp.add_handler(CallbackQueryHandler(marriage_callback, pattern="^marry_"))
-    dp.add_handler(
-    MessageHandler(Filters.text & ~Filters.command, global_text_handler),
-    group=0
-)
+    
 
     updater.start_polling()
     updater.idle()
