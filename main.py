@@ -19,14 +19,16 @@ logger = logging.getLogger(__name__)
 
 # ================== CONSTANTS ==================
 GUESSING, CHOOSING_PLAYER = range(2)
-SPECIAL_HASHTAG_CHAT = -5214033440
+SPECIAL_HASHTAG_CHAT = -1002250842606  # чат, де активні хештеги
+HASHTAG_LOG_CHAT = -1002408227652      # чат, куди слати повідомлення про бонус
+HASHTAG_REWARD = 50
 TOP_REWARD = {1: 20, 2: 10, 3: 5}
 STEAL_BASE_CHANCE = 0.4
 STEAL_STEP = 0.2
 STEAL_MAX_CHANCE = 0.9
 DEPOSIT_INTEREST = 0.05
-BANK_ROBBERY_CHANCE = 0.9
-BANK_ROBBERY_LOSS_CHANCE = 0.7
+BANK_ROBBERY_CHANCE = 0.05
+BANK_ROBBERY_LOSS_CHANCE = 0.5
 WITHDRAWAL_DAYS = [0, 3]  # 0 = понеділок, 3 = четвер
 DATA_FILE = "coins.json"
 
@@ -92,12 +94,19 @@ def global_text_handler(update, context):
         update.message.reply_text("👹")
         update.message.reply_text(f"@{username}, -1 монета")
 
-    # #️⃣ hashtag reward
+    # #️⃣ нагорода за хештег
     if "#" in text and update.message.chat.id == SPECIAL_HASHTAG_CHAT:
-        COINS[username] = COINS.get(username, 0) + 50
+        COINS[username] = COINS.get(username, 0) + HASHTAG_REWARD
         save_data()
-        update.message.reply_text(f"🎉 @{username}, +50 монет")
-        
+
+        # повідомлення в інший чат
+        try:
+            context.bot.send_message(
+                chat_id=HASHTAG_LOG_CHAT,
+                text=f"🎉 @{username} отримав(ла) {HASHTAG_REWARD} монет за хештег!"
+            )
+        except Exception as e:
+            print(f"Помилка при надсиланні в лог-чат: {e}")
 #=================DEPOSITS===================
 
 def deposit_balance(update, context):
