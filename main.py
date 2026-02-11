@@ -378,6 +378,15 @@ def top_money(update, context):
     msg = "\n".join(f"{i+1}. @{u}: {c}" for i, (u, c) in enumerate(top))
     update.message.reply_text(f"💰 Топ монет:\n{msg}")
 
+def top_messages(update, context):
+    stats = context.chat_data.get("chat_messages", {})
+    if not stats:
+        return update.message.reply_text("Немає статистики")
+
+    top = sorted(stats.items(), key=lambda x: x[1], reverse=True)[:5]
+    msg = "\n".join(f"{i+1}. {u}: {c}" for i, (u, c) in enumerate(top))
+    update.message.reply_text(f"📝 Топ повідомлень:\n{msg}")
+
 # ================== MAIN ==================
 def main():
     load_data()
