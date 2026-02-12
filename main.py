@@ -115,11 +115,11 @@ def global_text_handler(update, context):
     user = update.message.from_user
     username = user.username or user.first_name
 
-# 📝 Статистика повідомлень
-for period in ["daily", "weekly", "monthly", "all_time"]:
-    MESSAGE_STATS.setdefault(period, {})
-    MESSAGE_STATS[period][username] = MESSAGE_STATS[period].get(username, 0) + 1
-    MESSAGE_COUNTS[period] += 1
+    # 📝 Статистика повідомлень
+    for period in ["daily", "weekly", "monthly", "all_time"]:
+        MESSAGE_STATS.setdefault(period, {})
+        MESSAGE_STATS[period][username] = MESSAGE_STATS[period].get(username, 0) + 1
+        MESSAGE_COUNTS[period] += 1
 
     # 👹 "гетеро"
     if "гетеро" in text:
@@ -529,15 +529,6 @@ def top_money(update, context):
     msg = "\n".join(f"{i+1}. @{u}: {c}" for i, (u, c) in enumerate(top))
     update.message.reply_text(f"💰 Топ монет:\n{msg}")
 
-def top_messages(update, context):
-    stats = context.chat_data.get("chat_messages", {})
-    if not stats:
-        return update.message.reply_text("Немає статистики")
-
-    top = sorted(stats.items(), key=lambda x: x[1], reverse=True)[:5]
-    msg = "\n".join(f"{i+1}. {u}: {c}" for i, (u, c) in enumerate(top))
-    update.message.reply_text(f"📝 Топ повідомлень:\n{msg}")
-
 def send_daily_message_stats(context):
     msg = "📊 Топ повідомлень за день:\n\n"
 
@@ -610,6 +601,31 @@ def send_monthly_message_stats(context):
     MESSAGE_COUNTS["monthly"] = 0
 
     save_data()
+
+def top_messages(update, context):
+    period = "daily"
+
+    if context.args:
+        arg = context.args[0].lower()
+        if arg in ["daily", "weekly", "monthly", "all"]:
+            period = "all_time" if arg == "all" else arg
+
+    stats = MESSAGE_STATS.get(period, {})
+    if not stats:
+        return update.message.reply_text("Немає статистики")
+
+    top = sorted(stats.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    msg = "\n".join(
+        f"{i+1}. @{u}: {c}"
+        for i, (u, c) in enumerate(top)
+    )
+
+    total = MESSAGE_COUNTS.get(period, 0)
+
+    update.message.reply_text(
+        f"📝 Топ повідомлень ({period}):\n\n{msg}\n\nВсього: {total}"
+    )
 
 def post_stats_report(update, context):
     username = update.message.from_user.username or update.message.from_user.first_name
@@ -688,7 +704,7 @@ def main():
     job_queue.run_daily(send_weekly_stats, time=time(hour=6, minute=0, tzinfo=KYIV_TZ), days=(0,))  # Monday=0
 
     # Першого числа місяця о 10:00 київського часу
-    job_queue.run_daily(send_monthly_stats, time=time(hour=10, minute=0, tzinfo=KYIV_TZ), days=(1,))
+    job_queue.run_monthly(send_monthly_stats, when=time(hour=10, minute=0, tzinfo=KYIV_TZ), day=1)
 
     job_queue.run_daily(deposit_daily_interest, time=time(hour=0, minute=0, tzinfo=KYIV_TZ))
 
