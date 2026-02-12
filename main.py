@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import re 
 import json
 import random
 from random import shuffle, choice
@@ -101,41 +102,43 @@ def global_text_handler(update, context):
     if not update.message or not update.message.text:
         return
 
-    text = update.message.text.lower()
+    text = update.message.text
     user = update.message.from_user
     username = user.username or user.first_name
 
     # 📝 Щоденна статистика повідомлень
+    global MESSAGE_STATS, MESSAGE_COUNT
     MESSAGE_STATS[username] = MESSAGE_STATS.get(username, 0) + 1
     MESSAGE_COUNT += 1
 
     # 👹 "гетеро"
-    if "гетеро" in text:
+    if "гетеро" in text.lower():
         COINS[username] = max(COINS.get(username, 0) - 1, 0)
         save_data()
         update.message.reply_text("👹")
         update.message.reply_text(f"@{username}, -1 монета")
 
     # ================= HASH LOGIC =================
-    if "#" in text and update.message.chat.id == SPECIAL_HASHTAG_CHAT:
+    if update.message.chat.id == SPECIAL_HASHTAG_CHAT:
+        # знайти всі хештеги в тексті
+        hashtags = re.findall(r"#\w+", text)
+        if hashtags:
+            COINS[username] = COINS.get(username, 0) + HASHTAG_REWARD
+            save_data()
 
-        # 🎁 Нарахування монет
-        COINS[username] = COINS.get(username, 0) + HASHTAG_REWARD
+            try:
+                context.bot.send_message(
+                    chat_id=HASHTAG_LOG_CHAT,
+                    text=f"🎉 @{username} отримав(ла) {HASHTAG_REWARD} монет за хештеги: {' '.join(hashtags)}"
+                )
+            except Exception as e:
+                print(f"Помилка лог-чату: {e}")
 
-        try:
-            context.bot.send_message(
-                chat_id=HASHTAG_LOG_CHAT,
-                text=f"🎉 @{username} отримав(ла) {HASHTAG_REWARD} монет за пост!"
-            )
-        except Exception as e:
-            print(f"Помилка лог-чату: {e}")
-
-        # 📊 Статистика постів
-        for period in ["daily", "weekly", "monthly", "all_time"]:
-            POST_STATS.setdefault(period, {})
-            POST_STATS[period][username] = POST_STATS[period].get(username, 0) + 1
-            POST_COUNTS[period] += 1
-
+            # 📊 Статистика постів
+            for period in ["daily", "weekly", "monthly", "all_time"]:
+                POST_STATS.setdefault(period, {})
+                POST_STATS[period][username] = POST_STATS[period].get(username, 0) + 1
+                POST_COUNTS[period] += 1
         save_data()
 #=================DEPOSITS===================
 
