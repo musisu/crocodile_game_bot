@@ -643,7 +643,7 @@ def main():
     job_queue = updater.job_queue
 
     # Щодня о 00:00 київського часу
-    job_queue.run_daily(send_daily_stats, time=time(hour=0, minute=0, tzinfo=KYIV_TZ))
+    job_queue.run_daily(send_daily_stats, time=time(hour=18, minute=2, tzinfo=KYIV_TZ))
 
     # Щопонеділка о 06:00 київського часу
     job_queue.run_daily(send_weekly_stats, time=time(hour=6, minute=0, tzinfo=KYIV_TZ), days=(0,))  # Monday=0
