@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 # ================== CONSTANTS ==================
 GUESSING, CHOOSING_PLAYER = range(2)
-SPECIAL_HASHTAG_CHAT = -5214033440  # чат, де активні хештеги
-HASHTAG_LOG_CHAT = -5160791683      # чат, куди слати повідомлення про бонус
+SPECIAL_HASHTAG_CHAT = 5214033440  # чат, де активні хештеги
+HASHTAG_LOG_CHAT = 5160791683      # чат, куди слати повідомлення про бонус
 HASHTAG_REWARD = 50
 TOP_REWARD = {1: 20, 2: 10, 3: 5}
 STEAL_BASE_CHANCE = 0.4
