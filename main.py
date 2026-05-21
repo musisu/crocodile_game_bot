@@ -664,6 +664,58 @@ def manual_morning_report(update, context):
     
     update.message.reply_text(report, parse_mode="Markdown")
 
+# ================== КАРТКОВА ГАЧА-СИСТЕМА ==================
+def travel_command(update, context):
+    """Команда /travel — відкриває меню локацій"""
+    keyboard = [
+        [InlineKeyboardButton("🐸 Зазирнути на болото (50 🪙)", callback_data="gacha_болото")],
+        [InlineKeyboardButton("🌲 Піти в ліс (50 🪙)", callback_data="gacha_ліс")],
+        [InlineKeyboardButton("🌾 Вийти в поле (50 🪙)", callback_data="gacha_поле")],
+        [InlineKeyboardButton("🏡 Завітати в село (50 🪙)", callback_data="gacha_село")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text(
+        "🔮 Куди вирушимо на пошуки пригод та прадавньої хтоні?\n"
+        "Кожна мандрівка коштує *50 монет*.", 
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
+
+def gacha_button_handler(update, context):
+    """Обробник інлайн-кнопок крутки"""
+    query = update.callback_query
+    query.answer()
+    
+    user = query.from_user
+    username = user.username or user.first_name
+    location = query.data.split("_")[1]
+    
+    user_balance = get_shared_balance(username)
+    if user_balance < 50:
+        query.edit_message_text("❌ У тебе недостатньо монет для мандрівки! Потрібно 50 🪙.")
+        return
+
+    spend_coins(username, 50)
+    
+    time_of_day = cards.get_time_of_day()
+    category_name, card_name = cards.roll_gacha(location, time_of_day)
+    
+    status_msg = f"🚶‍♂️ @{username} вирушає в мандри: *{location.capitalize()}* ({time_of_day})\n"
+    status_msg += "─" * 20 + "\n"
+
+    if "Лихо" in category_name:
+        spend_coins(username, 20)
+        status_msg += f"💀 *ЛИХО!* \n{card_name}.\n\n💸 На додачу ти втрачаєш ще *20 монет* штрафу!"
+    else:
+        status_msg += f"🃏 Твоя знахідка: *{card_name}*\nКатегорія: _{category_name}_"
+        
+        INVENTORY.setdefault(username, {})
+        INVENTORY[username].setdefault("cards", {})
+        INVENTORY[username]["cards"][card_name] = INVENTORY[username]["cards"].get(card_name, 0) + 1
+
+    save_data()
+    query.edit_message_text(text=status_msg, parse_mode="Markdown")
+
 # ================== MAIN ==================
 def main():
     load_data()
