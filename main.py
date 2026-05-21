@@ -778,13 +778,13 @@ def main():
     dp.add_handler(CommandHandler("deposit_withdraw", deposit_withdraw))
     dp.add_handler(CommandHandler("post_stats_report", post_stats_report))
     dp.add_handler(CallbackQueryHandler(marriage_callback, pattern="^marry_"))
-        # Модуль гача-карток
+          # Модуль гача-карток
     dp.add_handler(CommandHandler("travel", travel_command))
     dp.add_handler(CallbackQueryHandler(gacha_button_handler, pattern="^gacha_"))
+    dp.add_handler(CommandHandler("morning_report", manual_morning_report))
     
 
     updater.start_polling()
-    updater.idle()
 
 if __name__ == "__main__":
     main()
