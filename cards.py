@@ -215,10 +215,11 @@ def gacha_button_handler(update, context):
     username = user.username or user.first_name
     location = query.data.split("_")[1]
     
-    # Імпортуємо функції та змінні з main.py всередині функції, щоб уникнути circular import
-    import main
+    # СВЯТА МАГІЯ PYTHON: замість "import main" підключаємось до вже запущеного процесу
+    import sys
+    main = sys.modules['__main__']
     
-    # Перевірка балансу (враховуючи шлюб)
+    # Тепер баланс точно підтягнеться з реальної бази даних в пам'яті!
     user_balance = main.get_shared_balance(username)
     if user_balance < 50:
         query.edit_message_text("❌ У тебе недостатньо монет для мандрівки! Потрібно 50 🪙.")
@@ -251,7 +252,8 @@ def gacha_button_handler(update, context):
 # === РАНКОВЕ ПОВІДОМЛЕННЯ ===
 def send_morning_report(context):
     """Генерує новий день та надсилає красивий звіт у чат логів"""
-    import main
+    import sys
+    main = sys.modules['__main__']
     
     state = update_daily_environment()
     moon_phase = MOON_PHASES[state["moon_phase_index"]]
