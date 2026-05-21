@@ -640,11 +640,11 @@ def main():
 
     from datetime import timedelta
 
-        # Ранковий звіт про погоду та фазу місяця о 08:00 за Києвом
-    job_queue.run_daily(cards.send_morning_report, time=time(hour=8, minute=0, tzinfo=KYIV_TZ))
-    
     # ... після ініціалізації updater
     job_queue = updater.job_queue
+
+    # Ранковий звіт про погоду та фазу місяця о 08:00 за Києвом
+    job_queue.run_daily(cards.send_morning_report, time=time(hour=8, minute=0, tzinfo=KYIV_TZ))
 
     # Щодня о 00:00 київського часу
     job_queue.run_daily(send_daily_stats, time=time(hour=23, minute=59, tzinfo=KYIV_TZ))
