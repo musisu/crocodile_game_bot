@@ -613,6 +613,57 @@ def format_post_stats(period):
     msg = f"📊 Статистика постів ({period.capitalize()}):\n\n{top_text}\n\nВсього постів: {total}"
     return msg
 
+# ================== РАНКОВІ ЗВІТИ ==================
+def send_morning_report(context):
+    """Автоматичний звіт о 08:00: ОНОВЛЮЄ погоду та місяць на новий день"""
+    state = cards.update_daily_environment()
+    moon_phase = cards.MOON_PHASES[state["moon_phase_index"]]
+    weather = state["weather"]
+    
+    weather_emojis = {"ясна": "☀️ Ясна погода", "дощ": "🌧 Проливний дощ", "гроза": "⛈ Лютнева гроза"}
+    moon_emojis = {
+        "Порожній день": "🌑 Порожній день (Час лиха)",
+        "Молодик": "🌒 Молодик", "Підріст": "🌓 Підріст", "Підповня": "🌔 Підповня",
+        "Повня": "🌕 Повня (Пік містики)",
+        "Перша щербина": "🌖 Перша щербина", "Остання кварта": "🌗 Остання кварта", "Гнилюк": "🌘 Гнилюк"
+    }
+
+    report = (
+        f"🌅 *Доброго ранку, чортенята! Новий день настав.*\n\n"
+        f"🌙 *Фаза місяця:* {moon_emojis.get(moon_phase, moon_phase)}\n"
+        f"🌤 *Погода на день:* {weather_emojis.get(weather, weather)}\n\n"
+        f"🔮 _Шанси в локаціях змінилися. Обирайте час для подорожей розумно через /travel_"
+    )
+    
+    context.bot.send_message(
+        chat_id=HASHTAG_LOG_CHAT, 
+        text=report, 
+        parse_mode="Markdown"
+    )
+
+def manual_morning_report(update, context):
+    """Ручний виклик звіту командою: просто ПОКАЗУЄ поточний стан"""
+    state = cards.load_world_state()
+    moon_phase = cards.MOON_PHASES[state["moon_phase_index"]]
+    weather = state["weather"]
+    
+    weather_emojis = {"ясна": "☀️ Ясна погода", "дощ": "🌧 Проливний дощ", "гроза": "⛈ Лютнева гроза"}
+    moon_emojis = {
+        "Порожній день": "🌑 Порожній день (Час лиха)",
+        "Молодик": "🌒 Молодик", "Підріст": "🌓 Підріст", "Підповня": "🌔 Підповня",
+        "Повня": "🌕 Повня (Пік містики)",
+        "Перша щербина": "🌖 Перша щербина", "Остання кварта": "🌗 Остання кварта", "Гнилюк": "🌘 Гнилюк"
+    }
+
+    report = (
+        f"📊 *Поточний стан світу (Ранковий звіт):*\n\n"
+        f"🌙 *Фаза місяця:* {moon_emojis.get(moon_phase, moon_phase)}\n"
+        f"🌤 *Погода:* {weather_emojis.get(weather, weather)}\n\n"
+        f"🔮 _Значення залишаються незмінними до наступного автоматичного ранку._"
+    )
+    
+    update.message.reply_text(report, parse_mode="Markdown")
+
 # ================== MAIN ==================
 def main():
     load_data()
