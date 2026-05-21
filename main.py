@@ -5,6 +5,7 @@ import os
 import re 
 import json
 import random
+import cards
 from random import shuffle, choice
 from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -639,6 +640,9 @@ def main():
 
     from datetime import timedelta
 
+        # Ранковий звіт про погоду та фазу місяця о 08:00 за Києвом
+    job_queue.run_daily(cards.send_morning_report, time=time(hour=8, minute=0, tzinfo=KYIV_TZ))
+    
     # ... після ініціалізації updater
     job_queue = updater.job_queue
 
@@ -671,6 +675,9 @@ def main():
     dp.add_handler(CommandHandler("deposit_withdraw", deposit_withdraw))
     dp.add_handler(CommandHandler("post_stats_report", post_stats_report))
     dp.add_handler(CallbackQueryHandler(marriage_callback, pattern="^marry_"))
+        # Модуль гача-карток
+    dp.add_handler(CommandHandler("travel", cards.travel_command))
+    dp.add_handler(CallbackQueryHandler(cards.gacha_button_handler, pattern="^gacha_"))
     
 
     updater.start_polling()
