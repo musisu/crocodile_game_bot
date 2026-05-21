@@ -5,6 +5,11 @@ on:
     branches:
       - master
 
+# === ЦЕЙ БЛОК АВТОМАТИЧНО ВБИВАЄ СТАРОГО БОТА ПРИ НОВОМУ ПУШІ ===
+concurrency:
+  group: telegram-bot-session
+  cancel-in-progress: true
+
 jobs:
   run-bot:
     runs-on: ubuntu-latest
