@@ -727,8 +727,8 @@ def main():
     dp.add_handler(CommandHandler("post_stats_report", post_stats_report))
     dp.add_handler(CallbackQueryHandler(marriage_callback, pattern="^marry_"))
         # Модуль гача-карток
-    dp.add_handler(CommandHandler("travel", cards.travel_command))
-    dp.add_handler(CallbackQueryHandler(cards.gacha_button_handler, pattern="^gacha_"))
+    dp.add_handler(CommandHandler("travel", travel_command))
+    dp.add_handler(CallbackQueryHandler(gacha_button_handler, pattern="^gacha_"))
     
 
     updater.start_polling()
