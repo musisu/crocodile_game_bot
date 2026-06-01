@@ -680,7 +680,6 @@ def travel_command(update, context):
         reply_markup=reply_markup,
         parse_mode="Markdown"
     )
-
 def gacha_button_handler(update, context):
     """Обробник інлайн-кнопок крутки"""
     query = update.callback_query
@@ -696,6 +695,28 @@ def gacha_button_handler(update, context):
         return
 
     spend_coins(username, 50)
+    
+    time_of_day = cards.get_time_of_day()
+    category_name, card_name = cards.roll_gacha(location, time_of_day)
+    
+    # Використовуємо HTML-теги замість Markdown
+    status_msg = f"🚶‍♂️ @{username} вирушає в мандри: <b>{location.capitalize()}</b> ({time_of_day})\n"
+    status_msg += "─" * 20 + "\n"
+
+    if "Лихо" in category_name:
+        spend_coins(username, 20)
+        status_msg += f"💀 <b>ЛИХО!</b> \n{card_name}.\n\n💸 На додачу ти втрачаєш ще <b>20 монет</b> штрафу!"
+    else:
+        status_msg += f"🃏 Твоя знахідка: <b>{card_name}</b>\nКатегорія: <i>{category_name}</i>"
+        
+        INVENTORY.setdefault(username, {})
+        INVENTORY[username].setdefault("cards", {})
+        INVENTORY[username]["cards"][card_name] = INVENTORY[username]["cards"].get(card_name, 0) + 1
+
+    save_data()
+    
+    # Змінюємо parse_mode на HTML
+    query.edit_message_text(text=status_msg, parse_mode="HTML")
     
     time_of_day = cards.get_time_of_day()
     category_name, card_name = cards.roll_gacha(location, time_of_day)
