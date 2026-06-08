@@ -789,7 +789,7 @@ def profile_command(update, context):
 # ================== АЛЬБОМ ТА ІЛЮСТРАЦІЇ ==================
 CARD_IMAGES = {}
 
-# Точна кількість унікальних карт для кожної масті
+# Точна кількість унікальних карт для кожної масті за твоїми правилами
 MAX_CARDS = {
     "♦️ Болото (Бубна)": 9,
     "♠️ Ліс (Піка)": 9,
@@ -914,7 +914,7 @@ def album_view_handler(update, context):
         stats_text = (
             f"♦️ <b>Бубна (Болото):</b> {suit_counts['♦️ Болото (Бубна)']}/{MAX_CARDS['♦️ Болото (Бубна)']} шт.\n"
             f"♠️ <b>Піка (Ліс):</b> {suit_counts['♠️ Ліс (Піка)']}/{MAX_CARDS['♠️ Ліс (Піка)']} шт.\n"
-            f"♣️ <b>Хреста (Поле):</b> {suit_counts['♣️ Поле (Хреста)']}/{MAX_CARDS['♣️ Поле (Хреста)']} шт.\n"
+            f"♣️ <b>Хреста (Поле):</b> {suit_counts['♣️ Поле (Хреста)']}/{MAX_CARDS['♣️ Поле (Хreста)']} шт.\n"
             f"♥️ <b>Черва (Село):</b> {suit_counts['♥️ Село (Черва)']}/{MAX_CARDS['♥️ Село (Черва)']} шт."
         )
         
@@ -997,17 +997,17 @@ def album_view_handler(update, context):
         count = collections[cat_name][card_name]
         image_id = CARD_IMAGES.get(card_name)
 
-        # 🔥 Надійний пошук ціни
+        # 🔥 Надійний пошук ціни (Об'єднуємо назву карти та її категорії)
         sell_price = 20
         name_lower = card_name.lower()
+        cat_lower = cat_name.lower()
+        search_text = f"{name_lower} {cat_lower}"
         
-        # Перевіряємо спочатку двозначне число 10, щоб не плутати з 1 чи 0
-        if "10" in name_lower or "десятка" in name_lower:
+        if "10" in search_text or "десятка" in search_text:
             sell_price = 100
         else:
-            # Шукаємо всі інші ключі
             for key, price in CARD_PRICES.items():
-                if key in name_lower:
+                if key in search_text:
                     sell_price = price
                     break
 
@@ -1042,8 +1042,9 @@ def album_view_handler(update, context):
             else:
                 query.edit_message_text(text=text, reply_markup=back_markup, parse_mode="HTML")
 
+
 def sell_card_handler(update, context):
-    """Обробляет нажатие на кнопку быстрой продажи карты с динамической ценой"""
+    """Обробляє натискання на кнопку швидкого продажу карти з динамічною ціною"""
     query = update.callback_query
     query.answer()
 
@@ -1070,15 +1071,17 @@ def sell_card_handler(update, context):
     if current_count <= 0:
         return query.edit_message_text("❌ У тебе немає цієї карти для продажу.")
 
-    # 🔥 Такий самий надійний пошук ціни для списання та нарахування монет
+    # 🔥 Розумний пошук для списання та нарахування монет
     sell_price = 20
     name_lower = card_name.lower()
+    cat_lower = cat_name.lower()
+    search_text = f"{name_lower} {cat_lower}"
     
-    if "10" in name_lower or "десятка" in name_lower:
+    if "10" in search_text or "десятка" in search_text:
         sell_price = 100
     else:
         for key, price in CARD_PRICES.items():
-            if key in name_lower:
+            if key in search_text:
                 sell_price = price
                 break
 
@@ -1195,10 +1198,10 @@ def main():
     # Модуль альбому
     dp.add_handler(CommandHandler("album", album_command))
     dp.add_handler(CallbackQueryHandler(album_view_handler, pattern="^alb_"))
-    dp.add_handler(CallbackQueryHandler(sell_card_handler, pattern="^sell_")) # <--- ДОДАЙ ЦЕЙ РЯДОК
-        # Профіль гравця
+    dp.add_handler(CallbackQueryHandler(sell_card_handler, pattern="^sell_"))
+    # Профіль гравця
     dp.add_handler(CommandHandler("profile", profile_command))
-    dp.add_handler(CommandHandler("me", profile_command)) # Додаємо синонім для зручності
+    dp.add_handler(CommandHandler("me", profile_command))
 
     updater.start_polling()
     updater.idle()
