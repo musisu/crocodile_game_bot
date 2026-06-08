@@ -737,6 +737,52 @@ def gacha_button_handler(update, context):
     save_data()
     query.edit_message_text(text=status_msg, parse_mode="Markdown")
 
+# ================== АНКЕТА ГРАВЦЯ ==================
+def profile_command(update, context):
+    """Виводить загальну інформацію про гравця"""
+    user = update.message.from_user
+    username = user.username or user.first_name
+    
+    # 1. Шлюбний статус та баланс
+    if is_married(username):
+        partner = MARRIAGES[username]["partner"]
+        balance = MARRIAGES[username]["shared"]
+        status = f"💍 У шлюбі з @{partner}"
+    else:
+        balance = COINS.get(username, 0)
+        status = "💔 В активному пошуку"
+        
+    # 2. Банківський депозит
+    deposit = DEPOSITS.get(username, 0)
+    
+    # 3. Інвентар (Каблучки)
+    rings = INVENTORY.get(username, {}).get("rings", [])
+    rings_text = ", ".join(rings) if rings else "Немає"
+    
+    # 4. Колекція карток
+    cards_dict = INVENTORY.get(username, {}).get("cards", {})
+    total_cards = sum(cards_dict.values())
+    unique_cards = len(cards_dict)
+    
+    # 5. Кримінальна статистика
+    steal_chance = STEAL_CHANCE.get(username, STEAL_BASE_CHANCE)
+    steal_percent = int(steal_chance * 100)
+    
+    # Формуємо красивий текст анкети за допомогою HTML (щоб імена з "_" не ламали бота)
+    profile_text = (
+        f"👤 <b>Анкета гравця @{username}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"❤️ <b>Статус:</b> {status}\n"
+        f"💰 <b>Баланс:</b> {balance} 🪙\n"
+        f"🏦 <b>Депозит:</b> {deposit} 🪙\n\n"
+        f"💍 <b>Каблучки:</b> {rings_text}\n"
+        f"🃏 <b>Альбом:</b> {total_cards} карток ({unique_cards} унікальних)\n"
+        f"🕵️‍♂️ <b>Ризик крадіжки:</b> {steal_percent}% шанс попастися\n"
+    )
+    
+    update.message.reply_text(profile_text, parse_mode="HTML")
+
+
 # ================== MAIN ==================
 def main():
     load_data()
@@ -803,7 +849,10 @@ def main():
     dp.add_handler(CommandHandler("travel", travel_command))
     dp.add_handler(CallbackQueryHandler(gacha_button_handler, pattern="^gacha_"))
     dp.add_handler(CommandHandler("morning_report", manual_morning_report))
-    
+        # Профіль гравця
+    dp.add_handler(CommandHandler("profile", profile_command))
+    dp.add_handler(CommandHandler("me", profile_command)) # Додаємо синонім для зручності
+
 
     updater.start_polling()
 
