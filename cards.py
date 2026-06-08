@@ -163,7 +163,7 @@ def roll_gacha(location, time_of_day):
         return f"Хабітат ({chosen_key})", card_value
     elif chosen_cat == "chthon":
         sub_cards = ["Паж", "Дама", "Король", "Туз", "Джокер"]
-        sub_weights = [6, 5, 5, 3, 100]
+        sub_weights = [6, 5, 5, 3, 1]
         chosen_key = random.choices(sub_cards, weights=sub_weights, k=1)[0]
         card_value = pool[chosen_key]
         if isinstance(card_value, list):
