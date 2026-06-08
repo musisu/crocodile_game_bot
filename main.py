@@ -765,131 +765,163 @@ def profile_command(update, context):
     update.message.reply_text(profile_text, parse_mode="HTML")
 
 # ================== АЛЬБОМ ТА ІЛЮСТРАЦІЇ ==================
+
 CARD_IMAGES = {}
 
 def album_command(update, context):
-    """Викликає головне меню альбому з ігноруванням дрібничок"""
+    """Викликає головне меню альбому з категоріями"""
     username = update.message.from_user.username or update.message.from_user.first_name
     collections = INVENTORY.get(username, {}).get("collections", {})
 
-    valid_cards = []
-    stats_lines = []
+    # Фільтруємо категорії (без дрібничок) і сортуємо за алфавітом
+    valid_cats = sorted([cat for cat in collections.keys() if "дрібничк" not in cat.lower()])
+
+    if not valid_cats:
+        return update.message.reply_text("📖 Твій альбом порожній. Вирушай у /travel!")
+
+    keyboard = []
     total_album_cards = 0
 
-    # Збираємо статистику по колекціях
-    for cat_name, cards_dict in collections.items():
-        if "дрібничк" in cat_name.lower():
-            continue # ❌ Ігноруємо дрібнички в альбомі!
-
-        cat_total = sum(cards_dict.values())
+    # Створюємо кнопки для кожної колекції
+    for idx, cat_name in enumerate(valid_cats):
+        cat_total = sum(collections[cat_name].values())
         total_album_cards += cat_total
-        stats_lines.append(f"🔹 <i>{cat_name}</i>: {cat_total} шт.")
+        btn_text = f"📂 {cat_name} ({cat_total} шт.)"
+        # callback_data зберігає індекс категорії
+        keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"alb_cat_{idx}")])
 
-        for card_name, count in cards_dict.items():
-            valid_cards.append((card_name, count))
-
-    if not valid_cards:
-        return update.message.reply_text("📖 Твій альбом порожній (або тут лише дрібнички). Вирушай у /travel!")
-
-    # Формуємо кнопки (по 2 в ряд)
-    keyboard = []
-    row = []
-    for idx, (c_name, count) in enumerate(valid_cards):
-        btn_text = f"{c_name} (x{count})"
-        row.append(InlineKeyboardButton(btn_text, callback_data=f"alb_{idx}"))
-        if len(row) == 2:
-            keyboard.append(row)
-            row = []
-    if row:
-        keyboard.append(row)
-
-    stats_text = "\n".join(stats_lines)
     msg_text = (
         f"📖 <b>Твій Альбом Знахідок</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"📦 <b>Загалом в альбомі:</b> {total_album_cards} шт.\n"
-        f"{stats_text}\n"
+        f"📦 <b>Загалом в альбомі:</b> {total_album_cards} карток\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"Обери картку, щоб роздивитися її:"
+        f"Обери розділ для перегляду:"
     )
 
     update.message.reply_text(msg_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 def album_view_handler(update, context):
-    """Обробляє натискання на картку в альбомі"""
+    """Обробляє натискання на кнопки в багаторівневому меню альбому"""
     query = update.callback_query
     query.answer()
 
     username = query.from_user.username or query.from_user.first_name
     collections = INVENTORY.get(username, {}).get("collections", {})
+    valid_cats = sorted([cat for cat in collections.keys() if "дрібничк" not in cat.lower()])
 
-    valid_cards = []
-    stats_lines = []
-    total_album_cards = 0
+    data = query.data
 
-    for cat_name, cards_dict in collections.items():
-        if "дрібничк" in cat_name.lower(): continue
-        cat_total = sum(cards_dict.values())
-        total_album_cards += cat_total
-        stats_lines.append(f"🔹 <i>{cat_name}</i>: {cat_total} шт.")
-        for c_name, count in cards_dict.items():
-            valid_cards.append((c_name, count))
+    # --- 1. ПОВЕРНЕННЯ В ГОЛОВНЕ МЕНЮ ---
+    if data == "alb_main":
+        keyboard = []
+        total_album_cards = 0
+        for idx, cat_name in enumerate(valid_cats):
+            cat_total = sum(collections[cat_name].values())
+            total_album_cards += cat_total
+            btn_text = f"📂 {cat_name} ({cat_total} шт.)"
+            keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"alb_cat_{idx}")])
 
-    if not valid_cards:
-        return query.edit_message_text("❌ Альбом порожній.")
-
-    keyboard = []
-    row = []
-    for idx, (c_name, count) in enumerate(valid_cards):
-        btn_text = f"{c_name} (x{count})"
-        row.append(InlineKeyboardButton(btn_text, callback_data=f"alb_{idx}"))
-        if len(row) == 2:
-            keyboard.append(row)
-            row = []
-    if row:
-        keyboard.append(row)
-
-    if query.data == "alb_back":
-        stats_text = "\n".join(stats_lines)
         msg_text = (
             f"📖 <b>Твій Альбом Знахідок</b>\n"
             f"━━━━━━━━━━━━━━━━━━\n"
-            f"📦 <b>Загалом в альбомі:</b> {total_album_cards} шт.\n"
-            f"{stats_text}\n"
+            f"📦 <b>Загалом в альбомі:</b> {total_album_cards} карток\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"Обери розділ для перегляду:"
+        )
+        
+        # Якщо повертаємось із фотографії (в майбутньому), треба надіслати текст наново
+        if query.message.photo:
+            query.message.delete()
+            context.bot.send_message(chat_id=query.message.chat_id, text=msg_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        else:
+            query.edit_message_text(text=msg_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        return
+
+    # --- 2. ВІДКРИТТЯ ПАПКИ (СПИСОК КАРТОК) ---
+    if data.startswith("alb_cat_"):
+        cat_idx = int(data.split("_")[2])
+        if cat_idx >= len(valid_cats):
+            return query.edit_message_text("❌ Помилка. Відкрий альбом знову.")
+        
+        cat_name = valid_cats[cat_idx]
+        cards_in_cat = collections[cat_name]
+        card_names = sorted(list(cards_in_cat.keys()))
+
+        keyboard = []
+        row = []
+        for c_idx, c_name in enumerate(card_names):
+            count = cards_in_cat[c_name]
+            btn_text = f"{c_name} (x{count})"
+            row.append(InlineKeyboardButton(btn_text, callback_data=f"alb_item_{cat_idx}_{c_idx}"))
+            if len(row) == 2:
+                keyboard.append(row)
+                row = []
+        if row:
+            keyboard.append(row)
+        
+        keyboard.append([InlineKeyboardButton("⬅️ Назад до розділів", callback_data="alb_main")])
+
+        msg_text = (
+            f"🗂 <b>Розділ: {cat_name}</b>\n"
             f"━━━━━━━━━━━━━━━━━━\n"
             f"Обери картку, щоб роздивитися її:"
         )
-        query.edit_message_text(msg_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+        if query.message.photo:
+            query.message.delete()
+            context.bot.send_message(chat_id=query.message.chat_id, text=msg_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        else:
+            query.edit_message_text(text=msg_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
         return
 
-    idx = int(query.data.split("_")[1])
-    if idx >= len(valid_cards):
-        return query.edit_message_text("❌ Помилка. Відкрий альбом знову.")
+    # --- 3. ПЕРЕГЛЯД КОНКРЕТНОЇ КАРТКИ ---
+    if data.startswith("alb_item_"):
+        parts = data.split("_")
+        cat_idx = int(parts[2])
+        card_idx = int(parts[3])
 
-    card_name, count = valid_cards[idx]
-    image_id = CARD_IMAGES.get(card_name)
+        if cat_idx >= len(valid_cats):
+            return query.edit_message_text("❌ Помилка. Відкрий альбом знову.")
+        
+        cat_name = valid_cats[cat_idx]
+        card_names = sorted(list(collections[cat_name].keys()))
 
-    text = (
-        f"🖼 <b>{card_name}</b>\n"
-        f"📦 Знайдено штук: <b>{count}</b>\n\n"
-        f"<i>(Тут згодом з'явиться справжня ілюстрація)</i>"
-    )
-    
-    back_markup = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад до альбому", callback_data="alb_back")]])
+        if card_idx >= len(card_names):
+            return query.edit_message_text("❌ Помилка. Відкрий альбом знову.")
 
-    if image_id:
-        try: query.message.delete()
-        except Exception: pass
-        context.bot.send_photo(
-            chat_id=query.message.chat_id, 
-            photo=image_id, 
-            caption=text, 
-            reply_markup=back_markup, 
-            parse_mode="HTML"
+        card_name = card_names[card_idx]
+        count = collections[cat_name][card_name]
+        image_id = CARD_IMAGES.get(card_name)
+
+        text = (
+            f"🖼 <b>{card_name}</b>\n"
+            f"🗂 Категорія: <i>{cat_name}</i>\n"
+            f"📦 Знайдено штук: <b>{count}</b>\n\n"
+            f"<i>(Тут згодом з'явиться справжня ілюстрація)</i>"
         )
-    else:
-        query.edit_message_text(text=text, reply_markup=back_markup, parse_mode="HTML")
+        
+        back_markup = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад до списку", callback_data=f"alb_cat_{cat_idx}")]])
 
+        # Якщо ми маємо справжнє зображення
+        if image_id:
+            try: 
+                query.message.delete()
+            except Exception: 
+                pass
+            context.bot.send_photo(
+                chat_id=query.message.chat_id, 
+                photo=image_id, 
+                caption=text, 
+                reply_markup=back_markup, 
+                parse_mode="HTML"
+            )
+        else:
+            # Поки картинок ще немає, просто оновлюємо текст
+            if query.message.photo:
+                query.message.delete()
+                context.bot.send_message(chat_id=query.message.chat_id, text=text, reply_markup=back_markup, parse_mode="HTML")
+            else:
+                query.edit_message_text(text=text, reply_markup=back_markup, parse_mode="HTML")
 
 # ================== MAIN ==================
 def main():
