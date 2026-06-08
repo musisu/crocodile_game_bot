@@ -800,11 +800,9 @@ MAX_CARDS = {
 # Загальний максимум гри (4 масті по 9 карт + 2 джокери = 38)
 TOTAL_GAME_MAX = 38
 
-# 💰 ОНОВЛЕНИЙ СЛОВНИК ЦІН ДЛЯ КОЖНОЇ КАРТКИ
-# Сюди ми вписали базові шістки-десятки (60-100) та вищі карти (200-666).
-# Бот перевірятиме назву карти або наявність ключового слова.
+# 💰 ТВОЯ ТАБЕЛЯ РАНГІВ ЦІН
+# Бот автоматично скануватиме назву карти на наявність цих слів/цифр
 CARD_PRICES = {
-    # Ранги за замовчуванням (якщо карта містить це слово або число у назві)
     "6": 60,
     "7": 70,
     "8": 80,
@@ -859,7 +857,6 @@ def album_command(update, context):
         f"♥️ <b>Черва (Село):</b> {suit_counts['♥️ Село (Черва)']}/{MAX_CARDS['♥️ Село (Черва)']} шт."
     )
     
-    # Якщо гравець уже знайшов хоча б одного джокера — додаємо його в статистику тексту
     if suit_counts["🃏 Особливі (Джокери)"] > 0:
         stats_text += f"\n🃏 <b>Джокери:</b> {suit_counts['🃏 Особливі (Джокери)']}/{MAX_CARDS['🃏 Особливі (Джокери)']} шт."
 
@@ -878,7 +875,7 @@ def album_command(update, context):
 
 
 def album_view_handler(update, context):
-    """Обробляє навігацію всередині папок альбому"""
+    """Обробляє навігацію всередині папок альбому та показ карти з кнопкою продажу"""
     query = update.callback_query
     query.answer()
 
@@ -1001,14 +998,27 @@ def album_view_handler(update, context):
         count = collections[cat_name][card_name]
         image_id = CARD_IMAGES.get(card_name)
 
+        # Розумне визначення динамічної ціни
+        sell_price = 20
+        name_lower = card_name.lower()
+        for key, price in CARD_PRICES.items():
+            if key in name_lower:
+                sell_price = price
+                break
+
         text = (
             f"🖼 <b>{card_name}</b>\n"
             f"🗂 Знайдено у: <i>{cat_name}</i>\n"
-            f"📦 Кількість: <b>{count} шт.</b> (повторки)\n\n"
+            f"📦 Кількість у тебе: <b>{count} шт.</b>\n"
+            f"💰 Вартість продажу боту: <b>{sell_price} 🪙</b>\n\n"
             f"<i>(Тут згодом з'явиться справжня ілюстрація)</i>"
         )
         
-        back_markup = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад до списку", callback_data=f"alb_cat_{cat_idx}")]])
+        keyboard = [
+            [InlineKeyboardButton(f"💰 Продати за {sell_price} 🪙", callback_data=f"sell_{cat_idx}_{card_idx}")],
+            [InlineKeyboardButton("⬅️ Назад до списку", callback_data=f"alb_cat_{cat_idx}")]
+        ]
+        back_markup = InlineKeyboardMarkup(keyboard)
 
         if image_id:
             try: query.message.delete()
@@ -1026,6 +1036,87 @@ def album_view_handler(update, context):
                 context.bot.send_message(chat_id=query.message.chat_id, text=text, reply_markup=back_markup, parse_mode="HTML")
             else:
                 query.edit_message_text(text=text, reply_markup=back_markup, parse_mode="HTML")
+
+
+def sell_card_handler(update, context):
+    """Обробляє натискання на кнопку швидкого продажу карти з динамічною ціною"""
+    query = update.callback_query
+    query.answer()
+
+    username = query.from_user.username or query.from_user.first_name
+    collections = INVENTORY.get(username, {}).get("collections", {})
+    valid_cats = sorted(list(collections.keys()))
+    
+    parts = query.data.split("_")
+    cat_idx = int(parts[1])
+    card_idx = int(parts[2])
+
+    if cat_idx >= len(valid_cats):
+        return query.edit_message_text("❌ Помилка продажу.")
+
+    cat_name = valid_cats[cat_idx]
+    card_names = sorted(list(collections[cat_name].keys()))
+
+    if card_idx >= len(card_names):
+        return query.edit_message_text("❌ Помилка продажу.")
+
+    card_name = card_names[card_idx]
+    current_count = collections[cat_name][card_name]
+
+    if current_count <= 0:
+        return query.edit_message_text("❌ У тебе немає цієї карти для продажу.")
+
+    # Рахуємо динамічну ціну
+    sell_price = 20
+    name_lower = card_name.lower()
+    for key, price in CARD_PRICES.items():
+        if key in name_lower:
+            sell_price = price
+            break
+
+    if current_count == 1:
+        collections[cat_name].pop(card_name)
+        if not collections[cat_name]:
+            collections.pop(cat_name)
+    else:
+        collections[cat_name][card_name] -= 1
+
+    add_coins(username, sell_price)
+    save_data()
+
+    valid_cats_updated = sorted(list(collections.keys()))
+    keyboard = []
+    
+    if cat_name in collections:
+        updated_cards = sorted(list(collections[cat_name].keys()))
+        row = []
+        for c_idx, c_name in enumerate(updated_cards):
+            count = collections[cat_name][c_name]
+            row.append(InlineKeyboardButton(f"{c_name} (x{count})", callback_data=f"alb_item_{cat_idx}_{c_idx}"))
+            if len(row) == 2:
+                keyboard.append(row)
+                row = []
+        if row: keyboard.append(row)
+        keyboard.append([InlineKeyboardButton("⬅️ Назад до розділів", callback_data="alb_main")])
+        msg_text = f"✅ Карта <b>{card_name}</b> успішно продана за <b>{sell_price} 🪙</b>!\n\n🗂 <b>Розділ: {cat_name}</b>\nОбери карту:"
+    else:
+        total_album_cards = sum(sum(cat.values()) for cat in collections.values())
+        total_unique_cards = sum(len(cat) for cat in collections.values())
+        
+        for idx, name in enumerate(valid_cats_updated):
+            cat_total = sum(collections[name].values())
+            cat_unique = len(collections[name])
+            max_in_cat = MAX_CARDS.get(name, "?")
+            keyboard.append([InlineKeyboardButton(f"{name} ({cat_unique}/{max_in_cat})", callback_data=f"alb_cat_{idx}")])
+            
+        msg_text = f"✅ Карта <b>{card_name}</b> була останньою і продана за <b>{sell_price} 🪙</b>!\n\n📖 <b>Твій Альбом Знахідок</b>\nОбери розділ:"
+
+    if query.message.photo:
+        query.message.delete()
+        context.bot.send_message(chat_id=query.message.chat_id, text=msg_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+    else:
+        query.edit_message_text(text=msg_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
 
 # ================== MAIN ==================
 def main():
@@ -1096,6 +1187,7 @@ def main():
     # Модуль альбому
     dp.add_handler(CommandHandler("album", album_command))
     dp.add_handler(CallbackQueryHandler(album_view_handler, pattern="^alb_"))
+    dp.add_handler(CallbackQueryHandler(sell_card_handler, pattern="^sell_")) # <--- ДОДАЙ ЦЕЙ РЯДОК
         # Профіль гравця
     dp.add_handler(CommandHandler("profile", profile_command))
     dp.add_handler(CommandHandler("me", profile_command)) # Додаємо синонім для зручності
