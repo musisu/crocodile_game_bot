@@ -782,6 +782,110 @@ def profile_command(update, context):
     
     update.message.reply_text(profile_text, parse_mode="HTML")
 
+# ================== АЛЬБОМ ТА ІЛЮСТРАЦІЇ ==================
+
+# Словник для збереження картинок. Поки порожній, але сюди ми потім 
+# додамо унікальні коди картинок (file_id) з Telegram.
+CARD_IMAGES = {}
+
+def album_command(update, context):
+    """Викликає головне меню альбому"""
+    username = update.message.from_user.username or update.message.from_user.first_name
+    user_cards = INVENTORY.get(username, {}).get("cards", {})
+
+    if not user_cards:
+        return update.message.reply_text("📖 Твій альбом порожній. Вирушай у /travel, щоб знайти перші картки!")
+
+    keyboard = []
+    card_names = list(user_cards.keys())
+
+    # Робимо кнопки карток по 2 в один ряд для краси
+    row = []
+    for idx, card_name in enumerate(card_names):
+        count = user_cards[card_name]
+        btn_text = f"{card_name} (x{count})"
+        row.append(InlineKeyboardButton(btn_text, callback_data=f"alb_{idx}"))
+        
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text(
+        "📖 <b>Твій Альбом Знахідок:</b>\nОбери картку, щоб роздивитися її!", 
+        reply_markup=reply_markup, 
+        parse_mode="HTML"
+    )
+
+def album_view_handler(update, context):
+    """Обробляє натискання на картку в альбомі"""
+    query = update.callback_query
+    query.answer()
+
+    username = query.from_user.username or query.from_user.first_name
+    user_cards = INVENTORY.get(username, {}).get("cards", {})
+    card_names = list(user_cards.keys())
+
+    # Якщо натиснули кнопку "Назад"
+    if query.data == "alb_back":
+        keyboard = []
+        row = []
+        for idx, c_name in enumerate(card_names):
+            count = user_cards[c_name]
+            btn_text = f"{c_name} (x{count})"
+            row.append(InlineKeyboardButton(btn_text, callback_data=f"alb_{idx}"))
+            if len(row) == 2:
+                keyboard.append(row)
+                row = []
+        if row:
+            keyboard.append(row)
+
+        query.edit_message_text(
+            "📖 <b>Твій Альбом Знахідок:</b>\nОбери картку, щоб роздивитися її!", 
+            reply_markup=InlineKeyboardMarkup(keyboard), 
+            parse_mode="HTML"
+        )
+        return
+
+    # Якщо натиснули на конкретну картку
+    idx = int(query.data.split("_")[1])
+    
+    if idx >= len(card_names):
+        return query.edit_message_text("❌ Помилка. Відкрий альбом знову через /album.")
+
+    card_name = card_names[idx]
+    count = user_cards[card_name]
+    
+    # Перевіряємо, чи є картинка у нашому словнику
+    image_id = CARD_IMAGES.get(card_name)
+
+    text = (
+        f"🖼 <b>{card_name}</b>\n"
+        f"📦 Знайдено штук: <b>{count}</b>\n\n"
+        f"<i>(Тут згодом з'явиться справжня ілюстрація)</i>"
+    )
+    
+    keyboard = [[InlineKeyboardButton("⬅️ Назад до альбому", callback_data="alb_back")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    # Логіка для майбутніх картинок (коли вони будуть, бот надсилатиме фото)
+    if image_id:
+        try:
+            query.message.delete() # Видаляємо старе текстове меню
+        except Exception:
+            pass
+        context.bot.send_photo(
+            chat_id=query.message.chat_id, 
+            photo=image_id, 
+            caption=text, 
+            reply_markup=reply_markup, 
+            parse_mode="HTML"
+        )
+    else:
+        # Поки картинок немає, просто оновлюємо текст
+        query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
 # ================== MAIN ==================
 def main():
@@ -845,16 +949,19 @@ def main():
     dp.add_handler(CommandHandler("deposit_withdraw", deposit_withdraw))
     dp.add_handler(CommandHandler("post_stats_report", post_stats_report))
     dp.add_handler(CallbackQueryHandler(marriage_callback, pattern="^marry_"))
-          # Модуль гача-карток
+    # Модуль гача-карток
     dp.add_handler(CommandHandler("travel", travel_command))
     dp.add_handler(CallbackQueryHandler(gacha_button_handler, pattern="^gacha_"))
     dp.add_handler(CommandHandler("morning_report", manual_morning_report))
+    # Модуль альбому
+    dp.add_handler(CommandHandler("album", album_command))
+    dp.add_handler(CallbackQueryHandler(album_view_handler, pattern="^alb_"))
         # Профіль гравця
     dp.add_handler(CommandHandler("profile", profile_command))
     dp.add_handler(CommandHandler("me", profile_command)) # Додаємо синонім для зручності
 
-
     updater.start_polling()
+    updater.idle()
 
 if __name__ == "__main__":
     main()
