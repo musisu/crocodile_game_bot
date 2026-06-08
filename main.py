@@ -782,8 +782,18 @@ def profile_command(update, context):
 # ================== АЛЬБОМ ТА ІЛЮСТРАЦІЇ ==================
 CARD_IMAGES = {}
 
+# Точна кількість унікальних карт для кожної масті за твоїми правилами
+MAX_CARDS = {
+    "♦️ Болото (Бубна)": 9,
+    "♠️ Ліс (Піка)": 9,
+    "♣️ Поле (Хреста)": 9,
+    "♥️ Село (Черва)": 9
+}
+# Загальний максимум гри (4 масті по 9 карт + 2 джокери = 38)
+TOTAL_GAME_MAX = 38
+
 def album_command(update, context):
-    """Головне меню альбому з папками-мастями та лічильниками"""
+    """Головне меню альбому з прогресом збору за твоїми точними цифрами"""
     username = update.message.from_user.username or update.message.from_user.first_name
     collections = INVENTORY.get(username, {}).get("collections", {})
     valid_cats = sorted(list(collections.keys()))
@@ -792,7 +802,8 @@ def album_command(update, context):
         return update.message.reply_text("📖 Твій альбом порожній. Вирушай у /travel!")
 
     keyboard = []
-    total_album_cards = 0
+    total_album_cards = 0      # Всього вибито карт (з повторками)
+    total_unique_cards = 0     # Скільки унікальних мастей зібрано
     
     suit_counts = {
         "♦️ Болото (Бубна)": 0,
@@ -801,30 +812,37 @@ def album_command(update, context):
         "♥️ Село (Черва)": 0
     }
 
+    # Якщо в майбутньому джокери випадатимуть як окрема категорія, бот теж їх порахує
     for idx, cat_name in enumerate(valid_cats):
         cat_total = sum(collections[cat_name].values())
+        cat_unique = len(collections[cat_name])
+        
         total_album_cards += cat_total
+        total_unique_cards += cat_unique
+        
         if cat_name in suit_counts:
-            suit_counts[cat_name] = cat_total
+            suit_counts[cat_name] = cat_unique
 
-        btn_text = f"{cat_name} ({cat_total} шт.)"
+        max_in_cat = MAX_CARDS.get(cat_name, "?")
+        btn_text = f"{cat_name} ({cat_unique}/{max_in_cat})"
         keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"alb_cat_{idx}")])
 
     stats_text = (
-        f"♦️ <b>Бубна (Болото):</b> {suit_counts['♦️ Болото (Бубна)']} шт.\n"
-        f"♠️ <b>Піка (Ліс):</b> {suit_counts['♠️ Ліс (Піка)']} шт.\n"
-        f"♣️ <b>Хреста (Поле):</b> {suit_counts['♣️ Поле (Хреста)']} шт.\n"
-        f"♥️ <b>Черва (Село):</b> {suit_counts['♥️ Село (Черва)']} шт."
+        f"♦️ <b>Бубна (Болото):</b> {suit_counts['♦️ Болото (Бубна)']}/{MAX_CARDS['♦️ Болото (Бубна)']} шт.\n"
+        f"♠️ <b>Піка (Ліс):</b> {suit_counts['♠️ Ліс (Піка)']}/{MAX_CARDS['♠️ Ліс (Піка)']} шт.\n"
+        f"♣️ <b>Хреста (Поле):</b> {suit_counts['♣️ Поле (Хреста)']}/{MAX_CARDS['♣️ Поле (Хреста)']} шт.\n"
+        f"♥️ <b>Черва (Село):</b> {suit_counts['♥️ Село (Черва)']}/{MAX_CARDS['♥️ Село (Черва)']} шт."
     )
 
     msg_text = (
         f"📖 <b>Твій Альбом Знахідок</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"📦 <b>Загалом в альбомі:</b> {total_album_cards} карток\n\n"
-        f"📊 <b>Статистика колекцій:</b>\n"
+        f"🏆 <b>Зібрано унікальних:</b> {total_unique_cards} / {TOTAL_GAME_MAX}\n"
+        f"📦 <b>Всього карт у тебе (з повторками):</b> {total_album_cards}\n\n"
+        f"📊 <b>Прогрес колекцій:</b>\n"
         f"{stats_text}\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"Обери розділ для перегляду карток:"
+        f"Обери розділ для перегляду карт:"
     )
 
     update.message.reply_text(msg_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
@@ -844,6 +862,8 @@ def album_view_handler(update, context):
     if data == "alb_main":
         keyboard = []
         total_album_cards = 0
+        total_unique_cards = 0
+        
         suit_counts = {
             "♦️ Болото (Бубна)": 0,
             "♠️ Ліс (Піка)": 0,
@@ -853,28 +873,34 @@ def album_view_handler(update, context):
 
         for idx, cat_name in enumerate(valid_cats):
             cat_total = sum(collections[cat_name].values())
-            total_album_cards += cat_total
-            if cat_name in suit_counts:
-                suit_counts[cat_name] = cat_total
+            cat_unique = len(collections[cat_name])
             
-            btn_text = f"{cat_name} ({cat_total} шт.)"
+            total_album_cards += cat_total
+            total_unique_cards += cat_unique
+            
+            if cat_name in suit_counts:
+                suit_counts[cat_name] = cat_unique
+            
+            max_in_cat = MAX_CARDS.get(cat_name, "?")
+            btn_text = f"{cat_name} ({cat_unique}/{max_in_cat})"
             keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"alb_cat_{idx}")])
 
         stats_text = (
-            f"♦️ <b>Бубна (Болото):</b> {suit_counts['♦️ Болото (Бубна)']} шт.\n"
-            f"♠️ <b>Піка (Ліс):</b> {suit_counts['♠️ Ліс (Піка)']} шт.\n"
-            f"♣️ <b>Хреста (Поле):</b> {suit_counts['♣️ Поле (Хреста)']} шт.\n"
-            f"♥️ <b>Черва (Село):</b> {suit_counts['♥️ Село (Черва)']} шт."
+            f"♦️ <b>Бубна (Болото):</b> {suit_counts['♦️ Болото (Бубна)']}/{MAX_CARDS['♦️ Болото (Бубна)']} шт.\n"
+            f"♠️ <b>Піка (Ліс):</b> {suit_counts['♠️ Ліс (Піка)']}/{MAX_CARDS['♠️ Ліс (Піка)']} шт.\n"
+            f"♣️ <b>Хреста (Поле):</b> {suit_counts['♣️ Поле (Хреста)']}/{MAX_CARDS['♣️ Поле (Хреста)']} шт.\n"
+            f"♥️ <b>Черва (Село):</b> {suit_counts['♥️ Село (Черва)']}/{MAX_CARDS['♥️ Село (Черва)']} шт."
         )
 
         msg_text = (
             f"📖 <b>Твій Альбом Знахідок</b>\n"
             f"━━━━━━━━━━━━━━━━━━\n"
-            f"📦 <b>Загалом в альбомі:</b> {total_album_cards} карток\n\n"
-            f"📊 <b>Статистика колекцій:</b>\n"
+            f"🏆 <b>Зібрано унікальних:</b> {total_unique_cards} / {TOTAL_GAME_MAX}\n"
+            f"📦 <b>Всього карт у тебе (з повторками):</b> {total_album_cards}\n\n"
+            f"📊 <b>Прогрес колекцій:</b>\n"
             f"{stats_text}\n"
             f"━━━━━━━━━━━━━━━━━━\n"
-            f"Обери розділ для перегляду карток:"
+            f"Обери розділ для перегляду карт:"
         )
         
         if query.message.photo:
@@ -908,10 +934,12 @@ def album_view_handler(update, context):
         
         keyboard.append([InlineKeyboardButton("⬅️ Назад до розділів", callback_data="alb_main")])
 
+        max_in_cat = MAX_CARDS.get(cat_name, "?")
         msg_text = (
             f"🗂 <b>Розділ: {cat_name}</b>\n"
+            f"📈 Прогрес масті: {len(card_names)}/{max_in_cat} унікальних\n"
             f"━━━━━━━━━━━━━━━━━━\n"
-            f"Обери картку, щоб роздивитися її:"
+            f"Обери карту, щоб роздивитися її:"
         )
 
         if query.message.photo:
@@ -943,7 +971,7 @@ def album_view_handler(update, context):
         text = (
             f"🖼 <b>{card_name}</b>\n"
             f"🗂 Знайдено у: <i>{cat_name}</i>\n"
-            f"📦 Кількість: <b>{count} шт.</b>\n\n"
+            f"📦 Кількість: <b>{count} шт.</b> (повторки)\n\n"
             f"<i>(Тут згодом з'явиться справжня ілюстрація)</i>"
         )
         
