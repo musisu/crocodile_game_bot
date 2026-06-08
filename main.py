@@ -707,23 +707,38 @@ def gacha_button_handler(update, context):
     time_of_day = cards.get_time_of_day()
     category_name, card_name = cards.roll_gacha(location, time_of_day)
     
+    # Маппінг локацій на масті для альбому
+    suit_mapping = {
+        "болото": "♦️ Болото (Бубна)",
+        "ліс": "♠️ Ліс (Піка)",
+        "поле": "♣️ Поле (Хреста)",
+        "село": "♥️ Село (Черва)"
+    }
+    folder_name = suit_mapping.get(location.lower(), f"📂 {location.capitalize()}")
+
     status_msg = f"🚶‍♂️ @{username} вирушає в мандри: <b>{location.capitalize()}</b> ({time_of_day})\n"
     status_msg += "─" * 20 + "\n"
 
     if "Лихо" in category_name:
         spend_coins(username, 20)
         status_msg += f"💀 <b>ЛИХО!</b> \n{card_name}.\n\n💸 На додачу ти втрачаєш ще <b>20 монет</b> штрафу!"
+        
+    elif "дрібничк" in category_name.lower():
+        # Дрібнички показуємо в чаті, але НЕ ЗБЕРІГАЄМО в альбом
+        status_msg += f"🪨 Знахідка: <b>{card_name}</b>\n<i>(Це дрібничка, вона не йде до альбому)</i>"
+        
     else:
+        # Усі цінні картки зберігаємо у відповідну папку-масть
         status_msg += f"🃏 Твоя знахідка: <b>{card_name}</b>\nКатегорія: <i>{category_name}</i>"
         
-        # НОВИЙ ФОРМАТ: Зберігаємо картку відразу в її колекцію
         INVENTORY.setdefault(username, {})
         INVENTORY[username].setdefault("collections", {})
-        INVENTORY[username]["collections"].setdefault(category_name, {})
-        INVENTORY[username]["collections"][category_name][card_name] = INVENTORY[username]["collections"][category_name].get(card_name, 0) + 1
+        INVENTORY[username]["collections"].setdefault(folder_name, {})
+        INVENTORY[username]["collections"][folder_name][card_name] = INVENTORY[username]["collections"][folder_name].get(card_name, 0) + 1
 
     save_data()
     query.edit_message_text(text=status_msg, parse_mode="HTML")
+
 
 # ================== АНКЕТА ГРАВЦЯ ==================
 def profile_command(update, context):
@@ -744,7 +759,6 @@ def profile_command(update, context):
     rings = INVENTORY.get(username, {}).get("rings", [])
     rings_text = ", ".join(rings) if rings else "Немає"
     
-    # Рахуємо всі картки гравця з нових колекцій
     collections = INVENTORY.get(username, {}).get("collections", {})
     total_cards = sum(sum(cat.values()) for cat in collections.values()) if collections else 0
     unique_cards = sum(len(cat) for cat in collections.values()) if collections else 0
@@ -759,22 +773,20 @@ def profile_command(update, context):
         f"💰 <b>Баланс:</b> {balance} 🪙\n"
         f"🏦 <b>Депозит:</b> {deposit} 🪙\n\n"
         f"💍 <b>Каблучки:</b> {rings_text}\n"
-        f"🃏 <b>Всього знахідок:</b> {total_cards} шт. ({unique_cards} унікальних)\n"
+        f"🃏 <b>Альбом:</b> {total_cards} знахідок ({unique_cards} унікальних)\n"
         f"🕵️‍♂️ <b>Ризик крадіжки:</b> {steal_percent}% шанс попастися\n"
     )
     update.message.reply_text(profile_text, parse_mode="HTML")
 
-# ================== АЛЬБОМ ТА ІЛЮСТРАЦІЇ ==================
 
+# ================== АЛЬБОМ ТА ІЛЮСТРАЦІЇ ==================
 CARD_IMAGES = {}
 
 def album_command(update, context):
-    """Викликає головне меню альбому з категоріями"""
+    """Головне меню альбому з папками-мастями"""
     username = update.message.from_user.username or update.message.from_user.first_name
     collections = INVENTORY.get(username, {}).get("collections", {})
-
-    # Фільтруємо категорії (без дрібничок) і сортуємо за алфавітом
-    valid_cats = sorted([cat for cat in collections.keys() if "дрібничк" not in cat.lower()])
+    valid_cats = sorted(list(collections.keys()))
 
     if not valid_cats:
         return update.message.reply_text("📖 Твій альбом порожній. Вирушай у /travel!")
@@ -782,12 +794,11 @@ def album_command(update, context):
     keyboard = []
     total_album_cards = 0
 
-    # Створюємо кнопки для кожної колекції
+    # Створюємо кнопки для кожної масті
     for idx, cat_name in enumerate(valid_cats):
         cat_total = sum(collections[cat_name].values())
         total_album_cards += cat_total
-        btn_text = f"📂 {cat_name} ({cat_total} шт.)"
-        # callback_data зберігає індекс категорії
+        btn_text = f"{cat_name} ({cat_total} шт.)"
         keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"alb_cat_{idx}")])
 
     msg_text = (
@@ -801,14 +812,13 @@ def album_command(update, context):
     update.message.reply_text(msg_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 def album_view_handler(update, context):
-    """Обробляє натискання на кнопки в багаторівневому меню альбому"""
+    """Обробляє навігацію всередині папок альбому"""
     query = update.callback_query
     query.answer()
 
     username = query.from_user.username or query.from_user.first_name
     collections = INVENTORY.get(username, {}).get("collections", {})
-    valid_cats = sorted([cat for cat in collections.keys() if "дрібничк" not in cat.lower()])
-
+    valid_cats = sorted(list(collections.keys()))
     data = query.data
 
     # --- 1. ПОВЕРНЕННЯ В ГОЛОВНЕ МЕНЮ ---
@@ -818,7 +828,7 @@ def album_view_handler(update, context):
         for idx, cat_name in enumerate(valid_cats):
             cat_total = sum(collections[cat_name].values())
             total_album_cards += cat_total
-            btn_text = f"📂 {cat_name} ({cat_total} шт.)"
+            btn_text = f"{cat_name} ({cat_total} шт.)"
             keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"alb_cat_{idx}")])
 
         msg_text = (
@@ -828,8 +838,6 @@ def album_view_handler(update, context):
             f"━━━━━━━━━━━━━━━━━━\n"
             f"Обери розділ для перегляду:"
         )
-        
-        # Якщо повертаємось із фотографії (в майбутньому), треба надіслати текст наново
         if query.message.photo:
             query.message.delete()
             context.bot.send_message(chat_id=query.message.chat_id, text=msg_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
@@ -837,7 +845,7 @@ def album_view_handler(update, context):
             query.edit_message_text(text=msg_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
         return
 
-    # --- 2. ВІДКРИТТЯ ПАПКИ (СПИСОК КАРТОК) ---
+    # --- 2. ВІДКРИТТЯ ПАПКИ-МАСТІ ---
     if data.startswith("alb_cat_"):
         cat_idx = int(data.split("_")[2])
         if cat_idx >= len(valid_cats):
@@ -895,19 +903,16 @@ def album_view_handler(update, context):
 
         text = (
             f"🖼 <b>{card_name}</b>\n"
-            f"🗂 Категорія: <i>{cat_name}</i>\n"
-            f"📦 Знайдено штук: <b>{count}</b>\n\n"
+            f"🗂 Знайдено у: <i>{cat_name}</i>\n"
+            f"📦 Кількість: <b>{count} шт.</b>\n\n"
             f"<i>(Тут згодом з'явиться справжня ілюстрація)</i>"
         )
         
         back_markup = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад до списку", callback_data=f"alb_cat_{cat_idx}")]])
 
-        # Якщо ми маємо справжнє зображення
         if image_id:
-            try: 
-                query.message.delete()
-            except Exception: 
-                pass
+            try: query.message.delete()
+            except Exception: pass
             context.bot.send_photo(
                 chat_id=query.message.chat_id, 
                 photo=image_id, 
@@ -916,7 +921,6 @@ def album_view_handler(update, context):
                 parse_mode="HTML"
             )
         else:
-            # Поки картинок ще немає, просто оновлюємо текст
             if query.message.photo:
                 query.message.delete()
                 context.bot.send_message(chat_id=query.message.chat_id, text=text, reply_markup=back_markup, parse_mode="HTML")
