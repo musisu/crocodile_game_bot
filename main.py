@@ -801,14 +801,15 @@ MAX_CARDS = {
 TOTAL_GAME_MAX = 38
 
 # 💰 ТВОЯ ТАБЕЛЯ РАНГІВ ЦІН
+# Ключі строго адаптовані під значення в дужках із твого cards.py!
 CARD_PRICES = {
-    "6": 60, "шістка": 60, "шистка": 60,
-    "7": 70, "сімка": 70,
-    "8": 80, "вісімка": 80, "висімка": 80,
-    "9": 90, "дев'ятка": 90, "девятка": 90,
-    "10": 100, "десятка": 100,
-    "паж": 200, "валет": 200,
-    "королева": 250, "дама": 250,
+    "6-ка": 60,
+    "7-ка": 70,
+    "8-ка": 80,
+    "9-ка": 90,
+    "10-ка": 100,
+    "паж": 200,
+    "дама": 250,
     "король": 300,
     "туз": 400,
     "джокер": 666
@@ -914,7 +915,7 @@ def album_view_handler(update, context):
         stats_text = (
             f"♦️ <b>Бубна (Болото):</b> {suit_counts['♦️ Болото (Бубна)']}/{MAX_CARDS['♦️ Болото (Бубна)']} шт.\n"
             f"♠️ <b>Піка (Ліс):</b> {suit_counts['♠️ Ліс (Піка)']}/{MAX_CARDS['♠️ Ліс (Піка)']} шт.\n"
-            f"♣️ <b>Хреста (Поле):</b> {suit_counts['♣️ Поле (Хреста)']}/{MAX_CARDS['♣️ Поле (Хreста)']} шт.\n"
+            f"♣️ <b>Хреста (Поле):</b> {suit_counts['♣️ Поле (Хреста)']}/{MAX_CARDS['♣️ Поле (Хреста)']} шт.\n"
             f"♥️ <b>Черва (Село):</b> {suit_counts['♥️ Село (Черва)']}/{MAX_CARDS['♥️ Село (Черва)']} шт."
         )
         
@@ -997,19 +998,41 @@ def album_view_handler(update, context):
         count = collections[cat_name][card_name]
         image_id = CARD_IMAGES.get(card_name)
 
-        # 🔥 Надійний пошук ціни (Об'єднуємо назву карти та її категорії)
-        sell_price = 20
-        name_lower = card_name.lower()
-        cat_lower = cat_name.lower()
-        search_text = f"{name_lower} {cat_lower}"
+        # 🔥 ЗНАХОДИМО ЦІНУ КАРТИ ЧЕРЕЗ БАЗУ СВІТУ `cards.py`
+        # Ми шукаємо, під яким саме ключем (наприклад, "9-ка" або "Паж") ця карта лежить у базі даних
+        sell_price = 20  # Стандартна ціна, якщо раптом карта не знайшлася
         
-        if "10" in search_text or "десятка" in search_text:
-            sell_price = 100
-        else:
-            for key, price in CARD_PRICES.items():
-                if key in search_text:
-                    sell_price = price
+        # Перетворюємо назву масті (папки альбому) на ключ для CARDS_DB
+        db_location = "ліс"
+        if "болото" in cat_name.lower(): db_location = "болото"
+        elif "поле" in cat_name.lower(): db_location = "поле"
+        elif "село" in cat_name.lower(): db_location = "село"
+
+        # Скануємо базу карт з cards.py, щоб дізнатися її справжній ранг
+        loc_pool = cards.CARDS_DB.get(db_location, {})
+        
+        # Спочатку перевіряємо Хабітат (числові карти)
+        found_rank = None
+        for rank, c_name in loc_pool.get("habitat", {}).items():
+            if c_name.lower() == card_name.lower():
+                found_rank = rank
+                break
+        
+        # Якщо не знайшли в Хабітаті, перевіряємо Хтонь (вищі карти та джокери)
+        if not found_rank:
+            for rank, c_value in loc_pool.get("chthon", {}).items():
+                if isinstance(c_value, list):
+                    # Для джокерів, де лежить список ["Джокер: Тунде", ...]
+                    if any(card_name.lower() in item.lower() for item in c_value) or card_name.lower() in [item.lower() for item in c_value]:
+                        found_rank = "джокер"
+                        break
+                elif c_value.lower() == card_name.lower():
+                    found_rank = rank
                     break
+        
+        # Якщо ранг успішно знайдено, беремо твою ціну зі словника
+        if found_rank:
+            sell_price = CARD_PRICES.get(found_rank.lower(), 20)
 
         text = (
             f"🖼 <b>{card_name}</b>\n"
@@ -1071,19 +1094,33 @@ def sell_card_handler(update, context):
     if current_count <= 0:
         return query.edit_message_text("❌ У тебе немає цієї карти для продажу.")
 
-    # 🔥 Розумний пошук для списання та нарахування монет
+    # 🔥 ТОЧНИЙ РОЗРАХУНОК ЦІНИ ДЛЯ НАРАХУВАННЯ МОНЕТ ЧЕРЕЗ CARDS_DB
     sell_price = 20
-    name_lower = card_name.lower()
-    cat_lower = cat_name.lower()
-    search_text = f"{name_lower} {cat_lower}"
+    db_location = "ліс"
+    if "болото" in cat_name.lower(): db_location = "болото"
+    elif "поле" in cat_name.lower(): db_location = "поле"
+    elif "село" in cat_name.lower(): db_location = "село"
+
+    loc_pool = cards.CARDS_DB.get(db_location, {})
+    found_rank = None
     
-    if "10" in search_text or "десятка" in search_text:
-        sell_price = 100
-    else:
-        for key, price in CARD_PRICES.items():
-            if key in search_text:
-                sell_price = price
+    for rank, c_name in loc_pool.get("habitat", {}).items():
+        if c_name.lower() == card_name.lower():
+            found_rank = rank
+            break
+            
+    if not found_rank:
+        for rank, c_value in loc_pool.get("chthon", {}).items():
+            if isinstance(c_value, list):
+                if any(card_name.lower() in item.lower() for item in c_value) or card_name.lower() in [item.lower() for item in c_value]:
+                    found_rank = "джокер"
+                    break
+            elif c_value.lower() == card_name.lower():
+                found_rank = rank
                 break
+                
+    if found_rank:
+        sell_price = CARD_PRICES.get(found_rank.lower(), 20)
 
     if current_count == 1:
         collections[cat_name].pop(card_name)
@@ -1154,8 +1191,6 @@ def main():
     )
     dp.add_handler(conv, group=1)
 
-    from datetime import timedelta
-
     # ... після ініціалізації updater
     job_queue = updater.job_queue
 
@@ -1166,7 +1201,7 @@ def main():
     job_queue.run_daily(send_daily_stats, time=time(hour=23, minute=59, tzinfo=KYIV_TZ))
 
     # Щопонеділка о 06:00 київського часу
-    job_queue.run_daily(send_weekly_stats, time=time(hour=6, minute=0, tzinfo=KYIV_TZ), days=(0,))  # Monday=0
+    job_queue.run_daily(send_weekly_stats, time=time(hour=6, minute=0, tzinfo=KYIV_TZ), days=(0,))
 
     # Першого числа місяця о 10:00 київського часу
     job_queue.run_monthly(send_monthly_stats, when=time(hour=10, minute=0, tzinfo=KYIV_TZ), day=1)
@@ -1191,14 +1226,17 @@ def main():
     dp.add_handler(CommandHandler("deposit_withdraw", deposit_withdraw))
     dp.add_handler(CommandHandler("post_stats_report", post_stats_report))
     dp.add_handler(CallbackQueryHandler(marriage_callback, pattern="^marry_"))
+    
     # Модуль гача-карток
     dp.add_handler(CommandHandler("travel", travel_command))
     dp.add_handler(CallbackQueryHandler(gacha_button_handler, pattern="^gacha_"))
     dp.add_handler(CommandHandler("morning_report", manual_morning_report))
+    
     # Модуль альбому
     dp.add_handler(CommandHandler("album", album_command))
     dp.add_handler(CallbackQueryHandler(album_view_handler, pattern="^alb_"))
     dp.add_handler(CallbackQueryHandler(sell_card_handler, pattern="^sell_"))
+    
     # Профіль гравця
     dp.add_handler(CommandHandler("profile", profile_command))
     dp.add_handler(CommandHandler("me", profile_command))
@@ -1207,4 +1245,4 @@ def main():
     updater.idle()
 
 if __name__ == "__main__":
-    main()
+    main
