@@ -800,18 +800,37 @@ MAX_CARDS = {
 # Загальний максимум гри (4 масті по 9 карт + 2 джокери = 38)
 TOTAL_GAME_MAX = 38
 
-# 💰 ТВОЯ ТАБЕЛЯ РАНГІВ ЦІН
-# Ключі строго адаптовані під значення в дужках із твого cards.py!
+# 💰 ТВОЯ ПЕРСОНАЛЬНА ТАБЕЛЯ РАНГІВ ДЛЯ ВСІХ КАРТ
+# Сюди ми вписали кожну карту з твого cards.py за відповідною ціною!
 CARD_PRICES = {
-    "6-ка": 60,
-    "7-ка": 70,
-    "8-ка": 80,
-    "9-ка": 90,
-    "10-ка": 100,
-    "паж": 200,
-    "дама": 250,
-    "король": 300,
-    "туз": 400,
+    # 6-ки — 60 монет
+    "мухомори": 60, "буряк": 60, "польові квіти": 60, "росички": 60,
+    
+    # 7-ки — 70 монет
+    "м+м": 70, "склеп": 70, "роздвоєна верба": 70, "хижа": 70,
+    
+    # 8-ки — 80 монет
+    "заєць": 80, "курочка": 80, "кізонька": 80, "равлик": 80,
+    
+    # 9-ки — 90 монет (Твій Кажан та Їжак!)
+    "їжак": 90, "собака": 90, "кажан": 90, "ропуха": 90,
+    
+    # 10-ки — 100 монет
+    "лисиця": 100, "кіт": 100, "ворон": 100, "блимавки": 100,
+    
+    # Пажі — 200 монет
+    "антипко": 200, "дідько": 200, "біс": 200, "гаспид": 200,
+    
+    # Дами — 250 монет
+    "мавка": 250, "баба": 250, "лала": 250, "болотяниці": 250,
+    
+    # Королі — 300 монет
+    "лісовик": 300, "водяник": 300, "блуд": 300, "болотяник": 300,
+    
+    # Тузи — 400 монет
+    "серп": 400, "монета": 400, "дзеркало": 400, "хрест": 400,
+    
+    # Джокери — 666 монет
     "джокер": 666
 }
 
@@ -998,41 +1017,14 @@ def album_view_handler(update, context):
         count = collections[cat_name][card_name]
         image_id = CARD_IMAGES.get(card_name)
 
-        # 🔥 ЗНАХОДИМО ЦІНУ КАРТИ ЧЕРЕЗ БАЗУ СВІТУ `cards.py`
-        # Ми шукаємо, під яким саме ключем (наприклад, "9-ка" або "Паж") ця карта лежить у базі даних
-        sell_price = 20  # Стандартна ціна, якщо раптом карта не знайшлася
+        # 🎯 Автономний пошук ціни карти без cards.py за ключовими словами
+        sell_price = 20  
+        name_lower = card_name.lower()
         
-        # Перетворюємо назву масті (папки альбому) на ключ для CARDS_DB
-        db_location = "ліс"
-        if "болото" in cat_name.lower(): db_location = "болото"
-        elif "поле" in cat_name.lower(): db_location = "поле"
-        elif "село" in cat_name.lower(): db_location = "село"
-
-        # Скануємо базу карт з cards.py, щоб дізнатися її справжній ранг
-        loc_pool = cards.CARDS_DB.get(db_location, {})
-        
-        # Спочатку перевіряємо Хабітат (числові карти)
-        found_rank = None
-        for rank, c_name in loc_pool.get("habitat", {}).items():
-            if c_name.lower() == card_name.lower():
-                found_rank = rank
+        for key, price in CARD_PRICES.items():
+            if key in name_lower:
+                sell_price = price
                 break
-        
-        # Якщо не знайшли в Хабітаті, перевіряємо Хтонь (вищі карти та джокери)
-        if not found_rank:
-            for rank, c_value in loc_pool.get("chthon", {}).items():
-                if isinstance(c_value, list):
-                    # Для джокерів, де лежить список ["Джокер: Тунде", ...]
-                    if any(card_name.lower() in item.lower() for item in c_value) or card_name.lower() in [item.lower() for item in c_value]:
-                        found_rank = "джокер"
-                        break
-                elif c_value.lower() == card_name.lower():
-                    found_rank = rank
-                    break
-        
-        # Якщо ранг успішно знайдено, беремо твою ціну зі словника
-        if found_rank:
-            sell_price = CARD_PRICES.get(found_rank.lower(), 20)
 
         text = (
             f"🖼 <b>{card_name}</b>\n"
@@ -1094,33 +1086,14 @@ def sell_card_handler(update, context):
     if current_count <= 0:
         return query.edit_message_text("❌ У тебе немає цієї карти для продажу.")
 
-    # 🔥 ТОЧНИЙ РОЗРАХУНОК ЦІНИ ДЛЯ НАРАХУВАННЯ МОНЕТ ЧЕРЕЗ CARDS_DB
+    # 🎯 Такий самий автономний розрахунок ціни для продажу
     sell_price = 20
-    db_location = "ліс"
-    if "болото" in cat_name.lower(): db_location = "болото"
-    elif "поле" in cat_name.lower(): db_location = "поле"
-    elif "село" in cat_name.lower(): db_location = "село"
-
-    loc_pool = cards.CARDS_DB.get(db_location, {})
-    found_rank = None
+    name_lower = card_name.lower()
     
-    for rank, c_name in loc_pool.get("habitat", {}).items():
-        if c_name.lower() == card_name.lower():
-            found_rank = rank
+    for key, price in CARD_PRICES.items():
+        if key in name_lower:
+            sell_price = price
             break
-            
-    if not found_rank:
-        for rank, c_value in loc_pool.get("chthon", {}).items():
-            if isinstance(c_value, list):
-                if any(card_name.lower() in item.lower() for item in c_value) or card_name.lower() in [item.lower() for item in c_value]:
-                    found_rank = "джокер"
-                    break
-            elif c_value.lower() == card_name.lower():
-                found_rank = rank
-                break
-                
-    if found_rank:
-        sell_price = CARD_PRICES.get(found_rank.lower(), 20)
 
     if current_count == 1:
         collections[cat_name].pop(card_name)
@@ -1245,4 +1218,5 @@ def main():
     updater.idle()
 
 if __name__ == "__main__":
-    main
+    main()
+
