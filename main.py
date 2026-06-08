@@ -998,13 +998,29 @@ def album_view_handler(update, context):
         count = collections[cat_name][card_name]
         image_id = CARD_IMAGES.get(card_name)
 
-        # Розумне визначення динамічної ціни
-        sell_price = 20
+              # 🔥 Суперточний пошук ціни карти за твоїми значеннями
+        sell_price = 20  # Базова ціна, якщо нічого не знайдено
         name_lower = card_name.lower()
-        for key, price in CARD_PRICES.items():
-            if key in name_lower:
-                sell_price = price
-                break
+        
+        # Перевіряємо вищі ранги (текстом)
+        if "джокер" in name_lower:
+            sell_price = 666
+        elif "туз" in name_lower:
+            sell_price = 400
+        elif "король" in name_lower:
+            sell_price = 300
+        elif "королева" in name_lower or "дама" in name_lower:
+            sell_price = 250
+        elif "паж" in name_lower or "валет" in name_lower:
+            sell_price = 200
+        else:
+            # Шукаємо точні цифри 6, 7, 8, 9, 10 за допомогою регулярних виразів
+            # Це захистить код від того, щоб бот не плутав "6" та "60"
+            numbers = re.findall(r'\b\d+\b', card_name)
+            if numbers:
+                exact_num = numbers[0]  # Беремо перше знайдене число (наприклад, "6")
+                if exact_num in CARD_PRICES:
+                    sell_price = CARD_PRICES[exact_num]
 
         text = (
             f"🖼 <b>{card_name}</b>\n"
@@ -1066,13 +1082,29 @@ def sell_card_handler(update, context):
     if current_count <= 0:
         return query.edit_message_text("❌ У тебе немає цієї карти для продажу.")
 
-    # Рахуємо динамічну ціну
-    sell_price = 20
-    name_lower = card_name.lower()
-    for key, price in CARD_PRICES.items():
-        if key in name_lower:
-            sell_price = price
-            break
+          # 🔥 Суперточний пошук ціни карти за твоїми значеннями
+        sell_price = 20  # Базова ціна, якщо нічого не знайдено
+        name_lower = card_name.lower()
+        
+        # Перевіряємо вищі ранги (текстом)
+        if "джокер" in name_lower:
+            sell_price = 666
+        elif "туз" in name_lower:
+            sell_price = 400
+        elif "король" in name_lower:
+            sell_price = 300
+        elif "королева" in name_lower or "дама" in name_lower:
+            sell_price = 250
+        elif "паж" in name_lower or "валет" in name_lower:
+            sell_price = 200
+        else:
+            # Шукаємо точні цифри 6, 7, 8, 9, 10 за допомогою регулярних виразів
+            # Це захистить код від того, щоб бот не плутав "6" та "60"
+            numbers = re.findall(r'\b\d+\b', card_name)
+            if numbers:
+                exact_num = numbers[0]  # Беремо перше знайдене число (наприклад, "6")
+                if exact_num in CARD_PRICES:
+                    sell_price = CARD_PRICES[exact_num]
 
     if current_count == 1:
         collections[cat_name].pop(card_name)
