@@ -29,4 +29,5 @@ jobs:
           TOKEN: ${{ secrets.TOKEN }}
         run: |
           python main.py &
-          sleep 300
+          sleep 1800
+
