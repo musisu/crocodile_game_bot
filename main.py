@@ -1207,7 +1207,6 @@ def auc_start_handler(update, context):
         f"👉 <i>Щоб зробити ставку, просто надішліть ЧИСЛО у відповідь (reply) на це повідомлення!</i>"
     )
 
-    # Додаємо інлайн-кнопки для управління безпосередньо для продавця
     keyboard = [
         [
             InlineKeyboardButton("💍 Прийняти поточну ставку", callback_data=f"aucbtn_accept_{lot_id}"),
@@ -1257,9 +1256,10 @@ def auc_bid_reply_handler(update, context):
     if bid_amount <= lot["current_price"]:
         return message.reply_text(f"❌ Твоя ставка має бути вищою за поточну ціну ({lot['current_price']} 🪙)!")
 
-    bidder_coins = COINS.get(bidder, 0)
+    # Розумна перевірка балансу (враховує шлюби)
+    bidder_coins = get_shared_balance(bidder)
     if bidder_coins < bid_amount:
-        return message.reply_text(f"❌ У тебе不足ньо монет! Твій баланс: {bidder_coins} 🪙")
+        return message.reply_text(f"❌ У тебе недостатньо монет! Твій баланс: {bidder_coins} 🪙")
 
     lot["current_price"] = bid_amount
     lot["highest_bidder"] = bidder
@@ -1277,7 +1277,6 @@ def auc_bid_reply_handler(update, context):
         f"👉 <i>Перебийте ставку, написавши більше число у відповідь на ЦЕ повідомлення!</i>"
     )
     
-    # Зберігаємо інлайн кнопки управління і в оновленому повідомленні ставки
     keyboard = [
         [
             InlineKeyboardButton("💍 Прийняти поточну ставку", callback_data=f"aucbtn_accept_{lot_id}"),
@@ -1295,7 +1294,7 @@ def process_auc_accept(lot_id, username):
 
     lot = auctions_db[lot_id]
     if lot["owner"] != username:
-        return "❌ Тільки власник карти може завершити цей аукціон!", False
+        return "❌ Тільки власник карти може завершити цей анукціон!", False
 
     if not lot["highest_bidder"]:
         return "❌ На цей лот ще немає жодної ставки. Ви можете лише скасувати його.", False
@@ -1303,14 +1302,16 @@ def process_auc_accept(lot_id, username):
     bidder = lot["highest_bidder"]
     final_price = lot["current_price"]
 
-    bidder_coins = COINS.get(bidder, 0)
+    # Розумна фінальна перевірка монет перед транзакцією
+    bidder_coins = get_shared_balance(bidder)
     if bidder_coins < final_price:
         lot["highest_bidder"] = None
         lot["current_price"] = 20
         save_data()
         return f"❌ У покупця @{bidder} забракло грошей! Ставку скасовано, торги скинуто.", False
 
-    COINS[bidder] -= final_price
+    # Списуємо у покупця та додаємо продавцю через spend_coins/add_coins
+    spend_coins(bidder, final_price)
     add_coins(lot["owner"], final_price)
 
     if "collections" not in INVENTORY.setdefault(bidder, {}):
@@ -1363,7 +1364,9 @@ def auc_button_click_handler(update, context):
     username = query.from_user.username or query.from_user.first_name
     parts = query.data.split("_")
     action = parts[1]  # accept або cancel
-    lot_id = parts[2]  # lot_12345
+    
+    # 🔥 Надійне зшивання ID лоту, навіть якщо у рядку є кілька символів "_" (наприклад: lot_48123)
+    lot_id = "_".join(parts[2:])
     
     if action == "accept":
         msg, is_ok = process_auc_accept(lot_id, username)
@@ -1371,10 +1374,8 @@ def auc_button_click_handler(update, context):
         msg, is_ok = process_auc_cancel(lot_id, username)
         
     if is_ok:
-        # При успішній дії прибираємо інлайн-клавіатуру та виводимо фінальний статус торгу
         query.edit_message_text(text=msg, parse_mode="HTML")
     else:
-        # Якщо сталася помилка (наприклад, кнопку натиснув чужий гравець), шлемо її окремим реплаєм
         context.bot.send_message(chat_id=query.message.chat_id, text=msg, reply_to_message_id=query.message.message_id)
 
 
@@ -1495,7 +1496,7 @@ def main():
     
     # Модуль аукціонів
     dp.add_handler(CallbackQueryHandler(auc_start_handler, pattern="^auc_start_"))
-    dp.add_handler(CallbackQueryHandler(auc_button_click_handler, pattern="^aucbtn_")) # <--- НОВИЙ ОБРОБНИК КНОПОК ПОДІЇ
+    dp.add_handler(CallbackQueryHandler(auc_button_click_handler, pattern="^aucbtn_"))
     dp.add_handler(CommandHandler("auctions", list_auctions_command))
     dp.add_handler(CommandHandler("auc_accept", auc_accept_command))
     dp.add_handler(CommandHandler("auc_cancel", auc_cancel_command))
