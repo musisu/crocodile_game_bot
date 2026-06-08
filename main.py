@@ -1199,21 +1199,28 @@ def auc_start_handler(update, context):
     auc_text = (
         f"⚖️ <b>НОВИЙ АУКЦІОН ПОЧАВСЯ!</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n"
+        f"🆔 <b>Номер лоту:</b> <code>{lot_id}</code>\n"
         f"👤 <b>Продавець:</b> @{username}\n"
         f"🖼 <b>Лот:</b> {card_name} (<i>{cat_name}</i>)\n"
         f"💰 <b>Стартова ціна:</b> {start_price} 🪙\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"👉 <i>Щоб зробити ставку, просто надішліть ЧИСЛО у відповідь (reply) на це повідомлення!</i>\n"
-        f"Власник може закрити аукціон командами:\n"
-        f"<code>/auc_accept {lot_id}</code> або <code>/auc_cancel {lot_id}</code>"
+        f"👉 <i>Щоб зробити ставку, просто надішліть ЧИСЛО у відповідь (reply) на це повідомлення!</i>"
     )
+
+    # Додаємо інлайн-кнопки для управління безпосередньо для продавця
+    keyboard = [
+        [
+            InlineKeyboardButton("💍 Прийняти поточну ставку", callback_data=f"aucbtn_accept_{lot_id}"),
+            InlineKeyboardButton("❌ Скасувати аукціон", callback_data=f"aucbtn_cancel_{lot_id}")
+        ]
+    ]
 
     try:
         query.message.delete()
     except Exception:
         pass
 
-    context.bot.send_message(chat_id=query.message.chat_id, text=auc_text, parse_mode="HTML")
+    context.bot.send_message(chat_id=query.message.chat_id, text=auc_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 
 def auc_bid_reply_handler(update, context):
@@ -1252,46 +1259,46 @@ def auc_bid_reply_handler(update, context):
 
     bidder_coins = COINS.get(bidder, 0)
     if bidder_coins < bid_amount:
-        return message.reply_text(f"❌ У тебе недостатньо монет! Твій баланс: {bidder_coins} 🪙")
+        return message.reply_text(f"❌ У тебе不足ньо монет! Твій баланс: {bidder_coins} 🪙")
 
     lot["current_price"] = bid_amount
     lot["highest_bidder"] = bidder
     save_data()
 
     updated_text = (
-        f"⚖️ <b>ПОТОЧНА СТАВКА ОНОВЛЕНА! (Лот: {lot_id})</b>\n"
+        f"⚖️ <b>ПОТОЧНА СТАВКА ОНОВЛЕНА!</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n"
+        f"🆔 <b>Номер лоту:</b> <code>{lot_id}</code>\n"
         f"👤 <b>Продавець:</b> @{lot['owner']}\n"
         f"🖼 <b>Лот:</b> {lot['card_name']}\n"
         f"🔥 <b>Лідер торгів:</b> @{bidder}\n"
         f"💰 <b>Поточна ставка:</b> {bid_amount} 🪙\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"👉 <i>Перебийте ставку, написавши більше число у відповідь на ЦЕ повідомлення!</i>\n"
-        f"Власник може завершити аукціон:\n"
-        f"<code>/auc_accept {lot_id}</code> або <code>/auc_cancel {lot_id}</code>"
+        f"👉 <i>Перебийте ставку, написавши більше число у відповідь на ЦЕ повідомлення!</i>"
     )
-    message.reply_text(updated_text, parse_mode="HTML")
-
-
-def auc_accept_command(update, context):
-    """Команда для власника: прийняти поточну ставку і завершити аукціон"""
-    username = update.message.from_user.username or update.message.from_user.first_name
-    if not context.args:
-        return update.message.reply_text("❌ Використовуй: /auc_accept <lot_id>")
     
-    lot_id = context.args[0].strip()
-    auctions_db = INVENTORY.get("active_auctions", {})
+    # Зберігаємо інлайн кнопки управління і в оновленому повідомленні ставки
+    keyboard = [
+        [
+            InlineKeyboardButton("💍 Прийняти поточну ставку", callback_data=f"aucbtn_accept_{lot_id}"),
+            InlineKeyboardButton("❌ Скасувати аукціон", callback_data=f"aucbtn_cancel_{lot_id}")
+        ]
+    ]
+    message.reply_text(updated_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
+
+def process_auc_accept(lot_id, username):
+    """Спільна внутрішня функція обробки закриття аукціону (для команди та інлайн кнопки)"""
+    auctions_db = INVENTORY.get("active_auctions", {})
     if lot_id not in auctions_db or auctions_db[lot_id]["status"] != "active":
-        return update.message.reply_text("❌ Такого активного аукціону не знайдено.")
+        return "❌ Такого активного аукціону не знайдено.", False
 
     lot = auctions_db[lot_id]
-
     if lot["owner"] != username:
-        return update.message.reply_text("❌ Тільки власник карти може завершити цей аукціон!")
+        return "❌ Тільки власник карти може завершити цей аукціон!", False
 
     if not lot["highest_bidder"]:
-        return update.message.reply_text("❌ На цей лот ще немає жодної ставки. Ви можете лише скасувати його через /auc_cancel.")
+        return "❌ На цей лот ще немає жодної ставки. Ви можете лише скасувати його.", False
 
     bidder = lot["highest_bidder"]
     final_price = lot["current_price"]
@@ -1301,7 +1308,7 @@ def auc_accept_command(update, context):
         lot["highest_bidder"] = None
         lot["current_price"] = 20
         save_data()
-        return update.message.reply_text(f"❌ У покупця @{bidder} забракло грошей! Ставку скинуто.")
+        return f"❌ У покупця @{bidder} забракло грошей! Ставку скасовано, торги скинуто.", False
 
     COINS[bidder] -= final_price
     add_coins(lot["owner"], final_price)
@@ -1316,30 +1323,23 @@ def auc_accept_command(update, context):
     lot["status"] = "closed"
     save_data()
 
-    update.message.reply_text(
+    success_msg = (
         f"🎉 <b>АУКЦІОН УСПІШНО ЗАВЕРШЕНО!</b>\n\n"
         f"🖼 Карта <b>{lot['card_name']}</b> переходить до @{bidder}!\n"
-        f"💰 @{lot['owner']} отримує свій куш у розмірі <b>{final_price} 🪙</b>!",
-        parse_mode="HTML"
+        f"💰 @{lot['owner']} отримує свій куш у розмірі <b>{final_price} 🪙</b>!"
     )
+    return success_msg, True
 
 
-def auc_cancel_command(update, context):
-    """Команда для власника: скасувати аукціон і повернути карту в свій альбом"""
-    username = update.message.from_user.username or update.message.from_user.first_name
-    if not context.args:
-        return update.message.reply_text("❌ Використовуй: /auc_cancel <lot_id>")
-
-    lot_id = context.args[0].strip()
+def process_auc_cancel(lot_id, username):
+    """Спільна внутрішня функція обробки скасування аукціону (для команди та інлайн кнопки)"""
     auctions_db = INVENTORY.get("active_auctions", {})
-
     if lot_id not in auctions_db or auctions_db[lot_id]["status"] != "active":
-        return update.message.reply_text("❌ Такого активного аукціону не знайдено.")
+        return "❌ Такого активного аукціону не знайдено.", False
 
     lot = auctions_db[lot_id]
-
     if lot["owner"] != username:
-        return update.message.reply_text("❌ Тільки власник карти може скасувати цей аукціон!")
+        return "❌ Тільки власник карти може скасувати цей аукціон!", False
 
     if "collections" not in INVENTORY.setdefault(lot["owner"], {}):
         INVENTORY[lot["owner"]]["collections"] = {}
@@ -1351,7 +1351,51 @@ def auc_cancel_command(update, context):
     lot["status"] = "canceled"
     save_data()
 
-    update.message.reply_text(f"🛑 Аукціон <code>{lot_id}</code> скасовано. Карта <b>{lot['card_name']}</b> повернулася у твій альбом.", parse_mode="HTML")
+    cancel_msg = f"🛑 Аукціон <code>{lot_id}</code> скасовано. Карта <b>{lot['card_name']}</b> повернулася у твій альбом."
+    return cancel_msg, True
+
+
+def auc_button_click_handler(update, context):
+    """Обробляє натискання інлайн кнопок управління аукціоном (Прийняти/Скасувати)"""
+    query = update.callback_query
+    query.answer()
+    
+    username = query.from_user.username or query.from_user.first_name
+    parts = query.data.split("_")
+    action = parts[1]  # accept або cancel
+    lot_id = parts[2]  # lot_12345
+    
+    if action == "accept":
+        msg, is_ok = process_auc_accept(lot_id, username)
+    else:
+        msg, is_ok = process_auc_cancel(lot_id, username)
+        
+    if is_ok:
+        # При успішній дії прибираємо інлайн-клавіатуру та виводимо фінальний статус торгу
+        query.edit_message_text(text=msg, parse_mode="HTML")
+    else:
+        # Якщо сталася помилка (наприклад, кнопку натиснув чужий гравець), шлемо її окремим реплаєм
+        context.bot.send_message(chat_id=query.message.chat_id, text=msg, reply_to_message_id=query.message.message_id)
+
+
+def auc_accept_command(update, context):
+    """Текстова команда /auc_accept для ретросумісності"""
+    username = update.message.from_user.username or update.message.from_user.first_name
+    if not context.args:
+        return update.message.reply_text("❌ Використовуй: /auc_accept <lot_id>")
+    lot_id = context.args[0].strip()
+    msg, _ = process_auc_accept(lot_id, username)
+    update.message.reply_text(msg, parse_mode="HTML")
+
+
+def auc_cancel_command(update, context):
+    """Текстова команда /auc_cancel для ретросумісності"""
+    username = update.message.from_user.username or update.message.from_user.first_name
+    if not context.args:
+        return update.message.reply_text("❌ Використовуй: /auc_cancel <lot_id>")
+    lot_id = context.args[0].strip()
+    msg, _ = process_auc_cancel(lot_id, username)
+    update.message.reply_text(msg, parse_mode="HTML")
 
 
 def list_auctions_command(update, context):
@@ -1451,6 +1495,7 @@ def main():
     
     # Модуль аукціонів
     dp.add_handler(CallbackQueryHandler(auc_start_handler, pattern="^auc_start_"))
+    dp.add_handler(CallbackQueryHandler(auc_button_click_handler, pattern="^aucbtn_")) # <--- НОВИЙ ОБРОБНИК КНОПОК ПОДІЇ
     dp.add_handler(CommandHandler("auctions", list_auctions_command))
     dp.add_handler(CommandHandler("auc_accept", auc_accept_command))
     dp.add_handler(CommandHandler("auc_cancel", auc_cancel_command))
