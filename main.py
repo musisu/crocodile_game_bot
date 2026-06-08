@@ -683,6 +683,14 @@ def travel_command(update, context):
 def gacha_button_handler(update, context):
     """Обробник інлайн-кнопок крутки"""
     query = update.callback_query
+    
+    # ЗАХИСТ ВІД ПОДВІЙНИХ КЛІКІВ
+    try:
+        query.edit_message_reply_markup(reply_markup=None)
+    except Exception:
+        query.answer("⌛ Шукаю картку, зачекай...", show_alert=False)
+        return
+
     query.answer()
     
     user = query.from_user
@@ -717,6 +725,7 @@ def gacha_button_handler(update, context):
     
     # Змінюємо parse_mode на HTML
     query.edit_message_text(text=status_msg, parse_mode="HTML")
+
     
     time_of_day = cards.get_time_of_day()
     category_name, card_name = cards.roll_gacha(location, time_of_day)
