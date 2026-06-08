@@ -681,7 +681,7 @@ def travel_command(update, context):
         parse_mode="Markdown"
     )
 def gacha_button_handler(update, context):
-    """Обробник інлайн-кнопок крутки"""
+    """Обробник інлайн-кнопок крутки з розумним перехопленням джокерів"""
     query = update.callback_query
     
     # ЗАХИСТ ВІД ПОДВІЙНИХ КЛІКІВ
@@ -707,13 +707,15 @@ def gacha_button_handler(update, context):
     time_of_day = cards.get_time_of_day()
     category_name, card_name = cards.roll_gacha(location, time_of_day)
     
-    # Маппінг локацій на масті для альбому
+    # Маппінг стандартних локацій на папки-масті
     suit_mapping = {
         "болото": "♦️ Болото (Бубна)",
         "ліс": "♠️ Ліс (Піка)",
         "поле": "♣️ Поле (Хреста)",
         "село": "♥️ Село (Черва)"
     }
+    
+    # Визначаємо початкове ім'я папки
     folder_name = suit_mapping.get(location.lower(), f"📂 {location.capitalize()}")
 
     status_msg = f"🚶‍♂️ @{username} вирушає в мандри: <b>{location.capitalize()}</b> ({time_of_day})\n"
@@ -724,13 +726,18 @@ def gacha_button_handler(update, context):
         status_msg += f"💀 <b>ЛИХО!</b> \n{card_name}.\n\n💸 На додачу ти втрачаєш ще <b>20 монет</b> штрафу!"
         
     elif "дрібничк" in category_name.lower():
-        # Дрібнички показуємо в чаті, але НЕ ЗБЕРІГАЄМО в альбом
+        # Дрібнички ігноруємо
         status_msg += f"🪨 Знахідка: <b>{card_name}</b>\n<i>(Це дрібничка, вона не йде до альбому)</i>"
         
     else:
-        # Усі цінні картки зберігаємо у відповідну папку-масть
-        status_msg += f"🃏 Твоя знахідка: <b>{card_name}</b>\nКатегорія: <i>{category_name}</i>"
+        # ПЕРЕВІРКА НА ДЖОКЕРА: Якщо в назві карти чи категорії є слово "джокер"
+        if "джокер" in category_name.lower() or "джокер" in card_name.lower():
+            folder_name = "🃏 Особливі (Джокери)"
+            status_msg += f"🃏 <b>ОГО! ТИ ЗНАЙШЛА ДЖОКЕРА!</b> \nТвоя суперрідкісна знахідка: <b>{card_name}</b>"
+        else:
+            status_msg += f"🃏 Твоя знахідка: <b>{card_name}</b>\nКатегорія: <i>{category_name}</i>"
         
+        # Зберігаємо у правильну папку
         INVENTORY.setdefault(username, {})
         INVENTORY[username].setdefault("collections", {})
         INVENTORY[username]["collections"].setdefault(folder_name, {})
