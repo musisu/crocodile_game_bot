@@ -801,7 +801,6 @@ MAX_CARDS = {
 TOTAL_GAME_MAX = 38
 
 # 💰 ТВОЯ ПЕРСОНАЛЬНА ТАБЕЛЯ РАНГІВ ДЛЯ ВСІХ КАРТ
-# Сюди ми вписали кожну карту з твого cards.py за відповідною ціною!
 CARD_PRICES = {
     # 6-ки — 60 монет
     "мухомори": 60, "буряк": 60, "польові квіти": 60, "росички": 60,
@@ -830,7 +829,7 @@ CARD_PRICES = {
     # Тузи — 400 монет
     "серп": 400, "монета": 400, "дзеркало": 400, "хрест": 400,
     
-    # Джокери — 666 монет
+    # Joker — 666 монет
     "джокер": 666
 }
 
@@ -894,7 +893,7 @@ def album_command(update, context):
 
 
 def album_view_handler(update, context):
-    """Обробляє навігацію всередині папок альбому та показ карти з кнопкою продажу"""
+    """Обробляє навігацію всередині папок альбому та показ карти з кнопками продажу/аукціону"""
     query = update.callback_query
     query.answer()
 
@@ -1017,7 +1016,6 @@ def album_view_handler(update, context):
         count = collections[cat_name][card_name]
         image_id = CARD_IMAGES.get(card_name)
 
-        # 🎯 Автономний пошук ціни карти без cards.py за ключовими словами
         sell_price = 20  
         name_lower = card_name.lower()
         
@@ -1034,12 +1032,11 @@ def album_view_handler(update, context):
             f"<i>(Тут згодом з'явиться справжня ілюстрація)</i>"
         )
         
-                keyboard = [
+        keyboard = [
             [InlineKeyboardButton(f"💰 Продати боту за {sell_price} 🪙", callback_data=f"sell_{cat_idx}_{card_idx}")],
             [InlineKeyboardButton(f"⚖️ Виставити на аукціон", callback_data=f"auc_start_{cat_idx}_{card_idx}")],
             [InlineKeyboardButton("⬅️ Назад до списку", callback_data=f"alb_cat_{cat_idx}")]
         ]
-
         back_markup = InlineKeyboardMarkup(keyboard)
 
         if image_id:
@@ -1061,7 +1058,7 @@ def album_view_handler(update, context):
 
 
 def sell_card_handler(update, context):
-    """Обробляє натискання на кнопку швидкого продажу карти з динамічною ціною"""
+    """Обробляє натискання на кнопку швидкого продажу карти боту з динамічною ціною"""
     query = update.callback_query
     query.answer()
 
@@ -1088,7 +1085,6 @@ def sell_card_handler(update, context):
     if current_count <= 0:
         return query.edit_message_text("❌ У тебе немає цієї карти для продажу.")
 
-    # 🎯 Такий самий автономний розрахунок ціни для продажу
     sell_price = 20
     name_lower = card_name.lower()
     
@@ -1140,6 +1136,7 @@ def sell_card_handler(update, context):
     else:
         query.edit_message_text(text=msg_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
+
 # ================== МОДУЛЬ АУКЦІОНІВ ==================
 
 def auc_start_handler(update, context):
@@ -1170,7 +1167,6 @@ def auc_start_handler(update, context):
     if current_count <= 0:
         return query.edit_message_text("❌ У тебе немає цієї карти для аукціону.")
 
-    # 🎯 Розраховуємо стартову ціну (як стандартна ціна карти з CARD_PRICES або 20)
     start_price = 20
     name_lower = card_name.lower()
     for key, price in CARD_PRICES.items():
@@ -1178,7 +1174,6 @@ def auc_start_handler(update, context):
             start_price = price
             break
 
-    # Вилучаємо карту з альбому власника
     if current_count == 1:
         collections[cat_name].pop(card_name)
         if not collections[cat_name]:
@@ -1186,11 +1181,9 @@ def auc_start_handler(update, context):
     else:
         collections[cat_name][card_name] -= 1
 
-    # Запускаємо аукціон у глобальній базі (зберігаємо у INVENTORY, щоб не губився)
     if "active_auctions" not in INVENTORY:
         INVENTORY["active_auctions"] = {}
 
-    # Генеруємо унікальний ID лоту
     lot_id = f"lot_{random.randint(10000, 99999)}"
     
     INVENTORY["active_auctions"][lot_id] = {
@@ -1203,7 +1196,6 @@ def auc_start_handler(update, context):
     }
     save_data()
 
-    # Надсилаємо повідомлення про початок торгів у поточний чат
     auc_text = (
         f"⚖️ <b>НОВИЙ АУКЦІОН ПОЧАВСЯ!</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n"
@@ -1216,9 +1208,10 @@ def auc_start_handler(update, context):
         f"<code>/auc_accept {lot_id}</code> або <code>/auc_cancel {lot_id}</code>"
     )
 
-    # Видаляємо старе інлайн меню альбому, щоб не плутатися
-    try: query.message.delete()
-    except Exception: pass
+    try:
+        query.message.delete()
+    except Exception:
+        pass
 
     context.bot.send_message(chat_id=query.message.chat_id, text=auc_text, parse_mode="HTML")
 
@@ -1226,16 +1219,13 @@ def auc_start_handler(update, context):
 def auc_bid_reply_handler(update, context):
     """Слухає текстові відповіді (reply) на повідомлення аукціонів для ставок"""
     message = update.message
-    # Перевіряємо, чи це відповідь на повідомлення бота
     if not message.reply_to_message or not message.reply_to_message.from_user.is_bot:
         return
     
     reply_text = message.reply_to_message.text or ""
-    # Перевіряємо, чи це повідомлення саме про аукціон і чи є там ID лоту
     if "НОВИЙ АУКЦІОН ПОЧАВСЯ" not in reply_text and "ПОТОЧНА СТАВКА ОНОВЛЕНА" not in reply_text:
         return
 
-    # Шукаємо ID лоту в повідомленні бота
     match = re.search(r"lot_\d+", reply_text)
     if not match:
         return
@@ -1252,22 +1242,18 @@ def auc_bid_reply_handler(update, context):
     if bidder == lot["owner"]:
         return message.reply_text("❌ Ви не можете робити ставки на свій власний лот!")
 
-    # Намагаємося розпарсити число зі ставки гравця
     try:
         bid_amount = int(message.text.strip())
     except ValueError:
         return message.reply_text("❌ Ставка має бути строгим цілим числом (наприклад: 120).")
 
-    # Перевіряємо, чи ставка більша за поточну ціну лоту
     if bid_amount <= lot["current_price"]:
         return message.reply_text(f"❌ Твоя ставка має бути вищою за поточну ціну ({lot['current_price']} 🪙)!")
 
-    # Перевіряємо баланс покупця
-    bidder_coins = INVENTORY.get(bidder, {}).get("coins", 0)
+    bidder_coins = COINS.get(bidder, 0)
     if bidder_coins < bid_amount:
         return message.reply_text(f"❌ У тебе недостатньо монет! Твій баланс: {bidder_coins} 🪙")
 
-    # Оновлюємо лот
     lot["current_price"] = bid_amount
     lot["highest_bidder"] = bidder
     save_data()
@@ -1291,7 +1277,7 @@ def auc_accept_command(update, context):
     """Команда для власника: прийняти поточну ставку і завершити аукціон"""
     username = update.message.from_user.username or update.message.from_user.first_name
     if not context.args:
-        return update.message.reply_text("❌ Використовуй: /auc_accept <lot_id> (наприклад: /auc_accept lot_12345)")
+        return update.message.reply_text("❌ Використовуй: /auc_accept <lot_id>")
     
     lot_id = context.args[0].strip()
     auctions_db = INVENTORY.get("active_auctions", {})
@@ -1310,30 +1296,23 @@ def auc_accept_command(update, context):
     bidder = lot["highest_bidder"]
     final_price = lot["current_price"]
 
-    # Фінальна перевірка балансу покупця на момент закриття
-    bidder_coins = INVENTORY.get(bidder, {}).get("coins", 0)
+    bidder_coins = COINS.get(bidder, 0)
     if bidder_coins < final_price:
         lot["highest_bidder"] = None
-        lot["current_price"] = 20 # скидаємо до базової
+        lot["current_price"] = 20
         save_data()
-        return update.message.reply_text(f"❌ У покупця @{bidder} забракло грошей на момент закриття! Аукціон скинуто.")
+        return update.message.reply_text(f"❌ У покупця @{bidder} забракло грошей! Ставку скинуто.")
 
-    # Проводимо транзакцію грошей
-    INVENTORY[bidder]["coins"] -= final_price
+    COINS[bidder] -= final_price
     add_coins(lot["owner"], final_price)
 
-    # Нараховуємо карту в альбом покупця
-    if "collections" not in INVENTORY[bidder]:
+    if "collections" not in INVENTORY.setdefault(bidder, {}):
         INVENTORY[bidder]["collections"] = {}
     if lot["cat_name"] not in INVENTORY[bidder]["collections"]:
         INVENTORY[bidder]["collections"][lot["cat_name"]] = {}
     
-    if lot["card_name"] not in INVENTORY[bidder]["collections"][lot["cat_name"]]:
-        INVENTORY[bidder]["collections"][lot["cat_name"]][lot["card_name"]] = 1
-    else:
-        INVENTORY[bidder]["collections"][lot["cat_name"]][lot["card_name"]] += 1
+    INVENTORY[bidder]["collections"][lot["cat_name"]][lot["card_name"]] = INVENTORY[bidder]["collections"][lot["cat_name"]].get(lot["card_name"], 0) + 1
 
-    # Закриваємо лот
     lot["status"] = "closed"
     save_data()
 
@@ -1362,16 +1341,12 @@ def auc_cancel_command(update, context):
     if lot["owner"] != username:
         return update.message.reply_text("❌ Тільки власник карти може скасувати цей аукціон!")
 
-    # Повертаємо карту назад у колекцію власнику
-    if "collections" not in INVENTORY[lot["owner"]]:
+    if "collections" not in INVENTORY.setdefault(lot["owner"], {}):
         INVENTORY[lot["owner"]]["collections"] = {}
     if lot["cat_name"] not in INVENTORY[lot["owner"]]["collections"]:
         INVENTORY[lot["owner"]]["collections"][lot["cat_name"]] = {}
 
-    if lot["card_name"] not in INVENTORY[lot["owner"]]["collections"][lot["cat_name"]]:
-        INVENTORY[lot["owner"]]["collections"][lot["cat_name"]][lot["card_name"]] = 1
-    else:
-        INVENTORY[lot["owner"]]["collections"][lot["cat_name"]][lot["card_name"]] += 1
+    INVENTORY[lot["owner"]]["collections"][lot["cat_name"]][lot["card_name"]] = INVENTORY[lot["owner"]]["collections"][lot["cat_name"]].get(lot["card_name"], 0) + 1
 
     lot["status"] = "canceled"
     save_data()
@@ -1474,16 +1449,12 @@ def main():
     dp.add_handler(CallbackQueryHandler(album_view_handler, pattern="^alb_"))
     dp.add_handler(CallbackQueryHandler(sell_card_handler, pattern="^sell_"))
     
-    # 🔥 НОВІ ХЕНДЛЕРИ ДЛЯ МОДУЛЯ АУКЦІОНІВ
+    # Модуль аукціонів
     dp.add_handler(CallbackQueryHandler(auc_start_handler, pattern="^auc_start_"))
     dp.add_handler(CommandHandler("auctions", list_auctions_command))
     dp.add_handler(CommandHandler("auc_accept", auc_accept_command))
     dp.add_handler(CommandHandler("auc_cancel", auc_cancel_command))
-    
-    # ⚠️ ВАЖЛИВО: цей рядок має бути ОСТАННІМ серед MessageHandler, 
-    # щоб він перехоплював відповіді на повідомлення аукціонів!
     dp.add_handler(MessageHandler(Filters.text & Filters.reply & ~Filters.command, auc_bid_reply_handler), group=2)
-
     
     # Профіль гравця
     dp.add_handler(CommandHandler("profile", profile_command))
@@ -1494,4 +1465,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
