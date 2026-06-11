@@ -368,43 +368,59 @@ def wallet(update, context):
 
 # ================== COINS COMMANDS ==================
 def add_coins_cmd(update, context):
-    """Адмін-команда додавання монет із підтримкою шлюбного балансу"""
-    # Спрощена перевірка на адміна (можеш додати свій ID, якщо потрібно)
-    if not context.args or len(context.args) < 2:
-        return update.message.reply_text("❗ Використання: /add <username> <кількість>")
+    """Адмін-команда: нарахування монет у відповідь (reply) на повідомлення з урахуванням шлюбу"""
+    if not is_admin(update, context):
+        return update.message.reply_text("⛔ Ця команда доступна тільки адміністраторам.")
         
-    target_user = context.args[0].replace("@", "")
+    if not update.message.reply_to_message or not context.args:
+        return update.message.reply_text("❗ Використання: Напишіть <code>/add &lt;кількість&gt;</code> у відповідь на повідомлення гравця.", parse_mode="HTML")
+        
     try:
-        amount = int(context.args[1])
+        amount = int(context.args[0])
+        if amount <= 0:
+            raise ValueError
     except ValueError:
-        return update.message.reply_text("❌ Кількість має бути числом.")
+        return update.message.reply_text("❌ Кількість монет має бути додатнім числом.")
         
-    # 🔥 Використовуємо add_coins — вона сама розбереться, чи людина в шлюбі
+    # Бот автоматично бере юзернейм того, на чиє повідомлення зробили reply
+    target_user = update.message.reply_to_message.from_user.username or update.message.reply_to_message.from_user.first_name
+    
+    # Використовуємо розумне нарахування (якщо одружений — кине в спільний сейф сім'ї)
     add_coins(target_user, amount)
     save_data()
     
     new_bal = get_shared_balance(target_user)
-    update.message.reply_text(f"✅ Додано {amount} 🪙 користувачу @{target_user}. Поточний баланс: {new_bal} 🪙")
+    update.message.reply_text(f"✅ Успішно нараховано +{amount} 🪙 користувачу @{target_user}.\nПоточний баланс: <b>{new_bal} 🪙</b>", parse_mode="HTML")
 
 
 def deduct_coins_cmd(update, context):
-    """Адмін-команда зняття монет із підтримкою шлюбного балансу"""
-    if not context.args or len(context.args) < 2:
-        return update.message.reply_text("❗ Використання: /deduct <username> <кількість>")
+    """Адмін-команда: списання монет у відповідь (reply) на повідомлення з урахуванням шлюбу"""
+    if not is_admin(update, context):
+        return update.message.reply_text("⛔ Ця команда доступна тільки адміністраторам.")
         
-    target_user = context.args[0].replace("@", "")
+    if not update.message.reply_to_message or not context.args:
+        return update.message.reply_text("❗ Використання: Напишіть <code>/deduct &lt;кількість&gt;</code> у відповідь на повідомлення гравця.", parse_mode="HTML")
+        
     try:
-        amount = int(context.args[1])
+        amount = int(context.args[0])
+        if amount <= 0:
+            raise ValueError
     except ValueError:
-        return update.message.reply_text("❌ Кількість має бути числом.")
+        return update.message.reply_text("❌ Кількість монет має бути додатнім числом.")
         
-    # 🔥 Використовуємо spend_coins — вона коректно спише з сімейного або особистого рахунку
+    target_user = update.message.reply_to_message.from_user.username or update.message.reply_to_message.from_user.first_name
+    
+    # Використовуємо розумне списання кошалі (зменшить спільний бюджет сім'ї, якщо одружений)
     if spend_coins(target_user, amount):
         save_data()
         new_bal = get_shared_balance(target_user)
-        update.message.reply_text(f"✅ Вираховано {amount} 🪙 у користувача @{target_user}. Поточний баланс: {new_bal} 🪙")
+        update.message.reply_text(f"✅ Успішно вираховано -{amount} 🪙 у користувача @{target_user}.\nПоточний баланс: <b>{new_bal} 🪙</b>", parse_mode="HTML")
     else:
-        update.message.reply_text(f"❌ Не вдалося списати кошти. У @{target_user} недостатньо монет (баланс: {get_shared_balance(target_user)} 🪙).")
+        # На випадок якщо адмін хоче зняти більше, ніж є на рахунку, примусово обнуляємо баланс пари/гравця, щоб не зайти в мінус
+        current_bal = get_shared_balance(target_user)
+        spend_coins(target_user, current_bal)
+        save_data()
+        update.message.reply_text(f"📉 У користувача @{target_user} було недостатньо монет. Баланс примусово обнулено до 0 🪙.")
 
 def gift_coins(update, context):
     if not update.message.reply_to_message or len(context.args) != 1:
