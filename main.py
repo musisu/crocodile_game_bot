@@ -689,12 +689,13 @@ def manual_morning_report(update, context):
 
 # ================== КАРТКОВА ГАЧА-СИСТЕМА ==================
 def travel_command(update, context):
-    """Команда /travel — відкриває меню локацій"""
+    """Команда /travel — відкриває меню локацій строго для того, хто її викликав"""
+    user_id = update.message.from_user.id
     keyboard = [
-        [InlineKeyboardButton("🐸 Зазирнути на болото (50 🪙)", callback_data="gacha_болото")],
-        [InlineKeyboardButton("🌲 Піти в ліс (50 🪙)", callback_data="gacha_ліс")],
-        [InlineKeyboardButton("🌾 Вийти в поле (50 🪙)", callback_data="gacha_поле")],
-        [InlineKeyboardButton("🏡 Завітати в село (50 🪙)", callback_data="gacha_село")]
+        [InlineKeyboardButton("🐸 Зазирнути на болото (50 🪙)", callback_data=f"gacha_болото_{user_id}")],
+        [InlineKeyboardButton("🌲 Піти в ліс (50 🪙)", callback_data=f"gacha_ліс_{user_id}")],
+        [InlineKeyboardButton("🌾 Вийти в поле (50 🪙)", callback_data=f"gacha_поле_{user_id}")],
+        [InlineKeyboardButton("🏡 Завітати в село (50 🪙)", callback_data=f"gacha_село_{user_id}")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_text(
@@ -703,10 +704,21 @@ def travel_command(update, context):
         reply_markup=reply_markup,
         parse_mode="Markdown"
     )
+
 def gacha_button_handler(update, context):
-    """Обробник інлайн-кнопок крутки з розумним перехопленням джокерів"""
+    """Обробник інлайн-кнопок крутки з перевіркою користувача"""
     query = update.callback_query
+    data_parts = query.data.split("_")
     
+    # Структура: gacha_локація_id
+    location = data_parts[1]
+    allowed_user_id = int(data_parts[2]) if len(data_parts) > 2 else None
+    
+    # 🔥 ЗАХИСТ ВІД ЧУЖИХ КЛІКІВ
+    if allowed_user_id and query.from_user.id != allowed_user_id:
+        query.answer("❌ Це не твоя мандрівка! Виклич свою за допомогою /travel", show_alert=True)
+        return
+
     # ЗАХИСТ ВІД ПОДВІЙНИХ КЛІКІВ
     try:
         query.edit_message_reply_markup(reply_markup=None)
@@ -718,7 +730,6 @@ def gacha_button_handler(update, context):
     
     user = query.from_user
     username = user.username or user.first_name
-    location = query.data.split("_")[1]
     
     user_balance = get_shared_balance(username)
     if user_balance < 50:
@@ -738,7 +749,6 @@ def gacha_button_handler(update, context):
         "село": "♥️ Село (Черва)"
     }
     
-    # Визначаємо початкове ім'я папки
     folder_name = suit_mapping.get(location.lower(), f"📂 {location.capitalize()}")
 
     status_msg = f"🚶‍♂️ @{username} вирушає в мандри: <b>{location.capitalize()}</b> ({time_of_day})\n"
@@ -749,18 +759,15 @@ def gacha_button_handler(update, context):
         status_msg += f"💀 <b>ЛИХО!</b> \n{card_name}.\n\n💸 На додачу ти втрачаєш ще <b>20 монет</b> штрафу!"
         
     elif "дрібничк" in category_name.lower():
-        # Дрібнички ігноруємо
         status_msg += f"🪨 Знахідка: <b>{card_name}</b>\n<i>(Це дрібничка, вона не йде до альбому)</i>"
         
     else:
-        # ПЕРЕВІРКА НА ДЖОКЕРА: Якщо в назві карти чи категорії є слово "джокер"
         if "джокер" in category_name.lower() or "джокер" in card_name.lower():
             folder_name = "🃏 Особливі (Джокери)"
             status_msg += f"🃏 <b>ОГО! ТИ ЗНАЙШЛА ДЖОКЕРА!</b> \nТвоя суперрідкісна знахідка: <b>{card_name}</b>"
         else:
             status_msg += f"🃏 Твоя знахідка: <b>{card_name}</b>\nКатегорія: <i>{category_name}</i>"
         
-        # Зберігаємо у правильну папку
         INVENTORY.setdefault(username, {})
         INVENTORY[username].setdefault("collections", {})
         INVENTORY[username]["collections"].setdefault(folder_name, {})
@@ -769,20 +776,22 @@ def gacha_button_handler(update, context):
     save_data()
     query.edit_message_text(text=status_msg, parse_mode="HTML")
 
-
 # ================== АНКЕТА ГРАВЦЯ ==================
 def profile_command(update, context):
-    """Виводить загальну інформацію про гравця"""
+    """Виводить загальну інформацію про гравця з повною інтеграцією сімейного бюджету"""
     user = update.message.from_user
     username = user.username or user.first_name
     
+    # Розраховуємо баланси з урахуванням сімейного статусу
     if is_married(username):
         partner = MARRIAGES[username]["partner"]
         balance = MARRIAGES[username]["shared"]
         status = f"💍 У шлюбі з @{partner}"
+        money_label = "💰 <b>Спільний баланс пари:</b>"
     else:
         balance = COINS.get(username, 0)
         status = "💔 В активному пошуку"
+        money_label = "💰 <b>Особистий баланс:</b>"
         
     deposit = DEPOSITS.get(username, 0)
     
@@ -800,14 +809,14 @@ def profile_command(update, context):
         f"👤 <b>Анкета гравця @{username}</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"❤️ <b>Статус:</b> {status}\n"
-        f"💰 <b>Баланс:</b> {balance} 🪙\n"
-        f"🏦 <b>Депозит:</b> {deposit} 🪙\n\n"
-        f"💍 <b>Каблучки:</b> {rings_text}\n"
-        f"🃏 <b>Альбом:</b> {total_cards} знахідок ({unique_cards} унікальних)\n"
+        f"{money_label} {balance} 🪙\n"
+        f"🏦 <b>Депозит у банку:</b> {deposit} 🪙\n\n"
+        f"💍 <b>Твої каблучки:</b> {rings_text}\n"
+        f"🃏 <b>Альбом знахідок:</b> {total_cards} шт. ({unique_cards}/38 унікальних)\n"
         f"🕵️‍♂️ <b>Ризик крадіжки:</b> {steal_percent}% шанс попастися\n"
+        f"━━━━━━━━━━━━━━━━━━"
     )
     update.message.reply_text(profile_text, parse_mode="HTML")
-
 
 # ================== АЛЬБОМ ТА ІЛЮСТРАЦІЇ ==================
 CARD_IMAGES = {}
