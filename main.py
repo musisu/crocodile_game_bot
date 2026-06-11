@@ -1194,6 +1194,8 @@ def sell_card_handler(update, context):
 
 # ================== МОДУЛЬ АУКЦІОНІВ ==================
 
+# ================== МОДУЛЬ АУКЦІОНІВ ==================
+
 def auc_start_handler(update, context):
     """Обробляє натискання на кнопку виставлення карти на аукціон"""
     query = update.callback_query
@@ -1311,7 +1313,6 @@ def auc_bid_reply_handler(update, context):
     if bid_amount <= lot["current_price"]:
         return message.reply_text(f"❌ Твоя ставка має бути вищою за поточну ціну ({lot['current_price']} 🪙)!")
 
-    # 🔥 ФІКС БАГУ №1: Використовуємо get_shared_balance замість COINS.get для перевірки сімейного бюджету шлюбів
     bidder_coins = get_shared_balance(bidder)
     if bidder_coins < bid_amount:
         return message.reply_text(f"❌ У тебе недостатньо монет! Твій баланс: {bidder_coins} 🪙")
@@ -1342,7 +1343,7 @@ def auc_bid_reply_handler(update, context):
 
 
 def process_auc_accept(lot_id, username):
-    """Спільна внутрішня функція обробки закриття аукціону (для команди та інлайн кнопки)"""
+    """Спільна внутрішня функція обробки закриття аукціону (для команди та инлайн кнопки)"""
     auctions_db = INVENTORY.get("active_auctions", {})
     if lot_id not in auctions_db or auctions_db[lot_id]["status"] != "active":
         return "❌ Такого активного аукціону не знайдено.", False
@@ -1357,7 +1358,6 @@ def process_auc_accept(lot_id, username):
     bidder = lot["highest_bidder"]
     final_price = lot["current_price"]
 
-    # Перевірка балансу перед закриттям лоту
     bidder_coins = get_shared_balance(bidder)
     if bidder_coins < final_price:
         lot["highest_bidder"] = None
@@ -1365,11 +1365,9 @@ def process_auc_accept(lot_id, username):
         save_data()
         return f"❌ У покупця @{bidder} забракло грошей! Ставку скасовано, торги скинуто.", False
 
-    # 🔥 ФІКС БАГУ №2: Використовуємо spend_coins та add_coins для правильного списання/нарахування одруженим
     spend_coins(bidder, final_price)
     add_coins(lot["owner"], final_price)
 
-    # 🔥 ФІКС БАГУ №3: Безпечне розгортання та додавання карти в інвентар переможця
     if bidder not in INVENTORY:
         INVENTORY[bidder] = {}
     if "collections" not in INVENTORY[bidder]:
@@ -1400,7 +1398,6 @@ def process_auc_cancel(lot_id, username):
     if lot["owner"] != username:
         return "❌ Тільки власник карти може скасувати цей аукціон!", False
 
-    # Безпечне повернення лоту назад власнику в альбом
     if lot["owner"] not in INVENTORY:
         INVENTORY[lot["owner"]] = {}
     if "collections" not in INVENTORY[lot["owner"]]:
@@ -1426,7 +1423,6 @@ def auc_button_click_handler(update, context):
     parts = query.data.split("_")
     action = parts[1]  # accept або cancel
     
-    # 🔥 ФІКС СТАРЛІНК-БАГУ: Зшиваємо ID лоту назад, ігноруючи підкреслення у назві лоту
     lot_id = "_".join(parts[2:])
     
     if action == "accept":
@@ -1510,68 +1506,6 @@ def main():
     dp.add_handler(conv, group=1)
 
     job_queue = updater.job_queue
-
-    # Ранковий звіт про погоду та фазу місяця о 08:00 за Києвом
-    job_queue.run_daily(send_morning_report, time=time(hour=8, minute=0, tzinfo=KYIV_TZ))
-
-    # Щодня о 00:00 київського часу
-    job_queue.run_daily(send_daily_stats, time=time(hour=23, minute=59, tzinfo=KYIV_TZ))
-
-    # Щопонеділка о 06:00 київського часу
-    job_queue.run_daily(send_weekly_stats, time=time(hour=6, minute=0, tzinfo=KYIV_TZ), days=(0,))
-
-    # Першого числа місяця о 10:00 київського часу
-    job_queue.run_monthly(send_monthly_stats, when=time(hour=10, minute=0, tzinfo=KYIV_TZ), day=1)
-
-    job_queue.run_daily(deposit_daily_interest, time=time(hour=0, minute=0, tzinfo=KYIV_TZ))
-
-    job_queue.run_daily(send_daily_message_stats, time=time(hour=0, minute=0, tzinfo=KYIV_TZ))
-
-    # Commands
-    dp.add_handler(CommandHandler("wallet", wallet))
-    dp.add_handler(CommandHandler("top_money", top_money))
-    dp.add_handler(CommandHandler("top", top_messages))
-    dp.add_handler(CommandHandler("add", add_coins_cmd))
-    dp.add_handler(CommandHandler("deduct", deduct_coins_cmd))
-    dp.add_handler(CommandHandler("gift", gift_coins))
-    dp.add_handler(CommandHandler("steal", steal_coins))
-    dp.add_handler(CommandHandler("buy_ring", buy_ring))
-    dp.add_handler(CommandHandler("marry", marry))
-    dp.add_handler(CommandHandler("divorce", divorce))
-    dp.add_handler(CommandHandler("deposit_balance", deposit_balance))
-    dp.add_handler(CommandHandler("deposit_add", deposit_add))
-    dp.add_handler(CommandHandler("deposit_withdraw", deposit_withdraw))
-    dp.add_handler(CommandHandler("post_stats_report", post_stats_report))
-    dp.add_handler(CallbackQueryHandler(marriage_callback, pattern="^marry_"))
-    
-    # Модуль гача-карток
-    dp.add_handler(CommandHandler("travel", travel_command))
-    dp.add_handler(CallbackQueryHandler(gacha_button_handler, pattern="^gacha_"))
-    dp.add_handler(CommandHandler("morning_report", manual_morning_report))
-    
-    # Модуль альбому
-    dp.add_handler(CommandHandler("album", album_command))
-    dp.add_handler(CallbackQueryHandler(album_view_handler, pattern="^alb_"))
-    dp.add_handler(CallbackQueryHandler(sell_card_handler, pattern="^sell_"))
-    
-    # Модуль аукціонів
-    dp.add_handler(CallbackQueryHandler(auc_start_handler, pattern="^auc_start_"))
-    dp.add_handler(CallbackQueryHandler(auc_button_click_handler, pattern="^aucbtn_"))
-    dp.add_handler(CommandHandler("auctions", list_auctions_command))
-    dp.add_handler(CommandHandler("auc_accept", auc_accept_command))
-    dp.add_handler(CommandHandler("auc_cancel", auc_cancel_command))
-    dp.add_handler(MessageHandler(Filters.text & Filters.reply & ~Filters.command, auc_bid_reply_handler), group=2)
-    
-    # Профіль гравця
-    dp.add_handler(CommandHandler("profile", profile_command))
-    dp.add_handler(CommandHandler("me", profile_command))
-
-    updater.start_polling()
-    updater.idle()
-
-if __name__ == "__main__":
-    main()
-
 
     # Ранковий звіт про погоду та фазу місяця о 08:00 за Києвом
     job_queue.run_daily(send_morning_report, time=time(hour=8, minute=0, tzinfo=KYIV_TZ))
