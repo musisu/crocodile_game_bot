@@ -446,32 +446,55 @@ def steal_coins(update, context):
 # ================== RINGS & MARRIAGE ==================
 def buy_ring(update, context):
     if len(context.args) != 1:
-        return update.message.reply_text(f"❗ /buy_ring <тип> | Доступні: {', '.join(RINGS.keys())}")
+        return update.message.reply_text(f"❗ Використання: /buy_ring <тип> | Доступні: {', '.join(RINGS.keys())}")
+    
     ring = context.args[0].lower()
-    if ring not in RINGS: return update.message.reply_text("❗ Невірний тип каблучки")
+    if ring not in RINGS: 
+        return update.message.reply_text("❗ Невірний тип каблучки")
+        
     username = update.message.from_user.username or update.message.from_user.first_name
     price = RINGS[ring]
-    if not spend_coins(username, price): return update.message.reply_text("💸 Недостатньо монет")
-    INVENTORY.setdefault(username, {"rings":[]})
+    
+    if not spend_coins(username, price): 
+        return update.message.reply_text("💸 Недостатньо монет")
+        
+    # 🔥 БЕЗПЕЧНЕ РОЗГОРТАННЯ СТРУКТУРИ ІНВЕНТАРЮ ДЛЯ КАБЛУЧОК
+    if username not in INVENTORY:
+        INVENTORY[username] = {}
+    if "rings" not in INVENTORY[username]:
+        INVENTORY[username]["rings"] = []
+        
     INVENTORY[username]["rings"].append(ring)
     save_data()
     update.message.reply_text(f"💍 @{username} купив каблучку {ring}")
 
+
 def marry(update, context):
     if not update.message.reply_to_message:
         return update.message.reply_text("❗ /marry у відповідь на повідомлення")
+        
     proposer = update.message.from_user
     partner = update.message.reply_to_message.from_user
     proposer_name = proposer.username or proposer.first_name
     partner_name = partner.username or partner.first_name
+    
     if proposer_name in MARRIAGES or partner_name in MARRIAGES:
         return update.message.reply_text("💔 Хтось уже в шлюбі")
+        
+    # Безпечно дістаємо список каблучок
     rings = INVENTORY.get(proposer_name, {}).get("rings", [])
     if not rings:
         return update.message.reply_text("❗ Купи каблучку")
+        
     ring = rings[-1]
     PENDING_MARRIAGES[partner_name] = {"from": proposer_name, "ring": ring}
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("💍 Прийняти", callback_data="marry_accept"), InlineKeyboardButton("❌ Відхилити", callback_data="marry_decline")]])
+    
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("💍 Прийняти", callback_data="marry_accept"), 
+            InlineKeyboardButton("❌ Відхилити", callback_data="marry_decline")
+        ]
+    ])
     update.message.reply_text(f"💌 @{partner_name}, тобі зробили пропозицію!\nКаблучка: {ring}", reply_markup=keyboard)
 
 def marriage_callback(update, context):
