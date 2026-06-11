@@ -241,28 +241,56 @@ def deposit_daily_interest(context):
 
 # ================== UTILITY ==================
 def is_married(username):
-    return username in MARRIAGES
+    """Розумна двостороння перевірка шлюбу"""
+    if username in MARRIAGES:
+        return True
+    for data in MARRIAGES.values():
+        if data.get("partner") == username:
+            return True
+    return False
 
 def get_shared_balance(username):
-    return MARRIAGES[username]["shared"] if is_married(username) else COINS.get(username, 0)
+    """Повертає спільний баланс для обох партнерів або особистий для неодружених"""
+    if username in MARRIAGES:
+        return MARRIAGES[username]["shared"]
+    # Шукаємо шлюб, де поточний юзер є партнером
+    for data in MARRIAGES.values():
+        if data.get("partner") == username:
+            return data["shared"]
+    return COINS.get(username, 0)
 
 def spend_coins(username, amount):
-    if is_married(username):
+    """Безпечно списує кошти зі спільного або особистого балансу"""
+    if username in MARRIAGES:
         if MARRIAGES[username]["shared"] < amount:
             return False
         MARRIAGES[username]["shared"] -= amount
         return True
-    else:
-        if COINS.get(username, 0) < amount:
-            return False
-        COINS[username] -= amount
-        return True
+        
+    for data in MARRIAGES.values():
+        if data.get("partner") == username:
+            if data["shared"] < amount:
+                return False
+            data["shared"] -= amount
+            return True
+            
+    if COINS.get(username, 0) < amount:
+        return False
+    COINS[username] -= amount
+    return True
 
 def add_coins(username, amount):
-    if is_married(username):
+    """Нараховує монети у спільний або особистий гаманець"""
+    if username in MARRIAGES:
         MARRIAGES[username]["shared"] += amount
-    else:
-        COINS[username] = COINS.get(username, 0) + amount
+        return
+        
+    for data in MARRIAGES.values():
+        if data.get("partner") == username:
+            data["shared"] += amount
+            return
+            
+    COINS[username] = COINS.get(username, 0) + amount
 
 def is_admin(update, context):
     try:
@@ -803,18 +831,29 @@ def gacha_button_handler(update, context):
 
 # ================== АНКЕТА ГРАВЦЯ ==================
 def profile_command(update, context):
-    """Виводить повну анкету гравця з абсолютно правильною фінансовою інтеграцією"""
+    """Виводить повну анкету гравця з абсолютно правильною фінансовою інтеграцією для обох партнерів"""
     user = update.message.from_user
     username = user.username or user.first_name
     
-    # 🔥 ВИКОРИСТОВУЄМО ГЛОБАЛЬНУ ФУНКЦІЮ БАЛАНСУ ДЛЯ ВСІХ ПЕРЕВІРОК
     current_balance = get_shared_balance(username)
     deposit = DEPOSITS.get(username, 0)
     
-    # Визначаємо шлюбний статус
-    if is_married(username):
-        partner = MARRIAGES[username]["partner"]
-        status = f"💍 У шлюбі з @{partner}"
+    # Визначаємо шлюбний статус та ім'я партнера
+    married = False
+    partner_name = None
+    
+    if username in MARRIAGES:
+        married = True
+        partner_name = MARRIAGES[username]["partner"]
+    else:
+        for husband_or_wife, data in MARRIAGES.items():
+            if data.get("partner") == username:
+                married = True
+                partner_name = husband_or_wife
+                break
+
+    if married:
+        status = f"💍 У шлюбі з @{partner_name}"
         money_label = "💰 <b>Спільний баланс пари:</b>"
     else:
         status = "💔 В активному пошуку"
@@ -842,6 +881,7 @@ def profile_command(update, context):
         f"━━━━━━━━━━━━━━━━━━"
     )
     update.message.reply_text(profile_text, parse_mode="HTML")
+
 
 # ================== АЛЬБОМ ТА ІЛЮСТРАЦІЇ ==================
 CARD_IMAGES = {}
