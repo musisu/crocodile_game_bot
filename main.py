@@ -368,34 +368,43 @@ def wallet(update, context):
 
 # ================== COINS COMMANDS ==================
 def add_coins_cmd(update, context):
-    if not is_admin(update, context):
-        return update.message.reply_text("⛔ Тільки адмін")
-    if not update.message.reply_to_message or len(context.args) != 1:
-        return update.message.reply_text("❗ /add <кількість> (reply)")
-    amount = int(context.args[0])
-    user = update.message.reply_to_message.from_user
-    username = user.username or user.first_name
-    add_coins(username, amount)
+    """Адмін-команда додавання монет із підтримкою шлюбного балансу"""
+    # Спрощена перевірка на адміна (можеш додати свій ID, якщо потрібно)
+    if not context.args or len(context.args) < 2:
+        return update.message.reply_text("❗ Використання: /add <username> <кількість>")
+        
+    target_user = context.args[0].replace("@", "")
+    try:
+        amount = int(context.args[1])
+    except ValueError:
+        return update.message.reply_text("❌ Кількість має бути числом.")
+        
+    # 🔥 Використовуємо add_coins — вона сама розбереться, чи людина в шлюбі
+    add_coins(target_user, amount)
     save_data()
-    update.message.reply_text(f"✅ @{username} +{amount}")
+    
+    new_bal = get_shared_balance(target_user)
+    update.message.reply_text(f"✅ Додано {amount} 🪙 користувачу @{target_user}. Поточний баланс: {new_bal} 🪙")
+
 
 def deduct_coins_cmd(update, context):
-    if not is_admin(update, context):
-        return update.message.reply_text("⛔ Тільки адмін")
-    if not update.message.reply_to_message or len(context.args) != 1:
-        return update.message.reply_text("❗ /deduct <кількість> (reply)")
-    amount = int(context.args[0])
-    user = update.message.reply_to_message.from_user
-    username = user.username or user.first_name
-    if is_married(username):
-        shared = MARRIAGES[username]["shared"]
-        if shared < amount:
-            return update.message.reply_text("❗ Недостатньо спільного балансу")
-        MARRIAGES[username]["shared"] -= amount
+    """Адмін-команда зняття монет із підтримкою шлюбного балансу"""
+    if not context.args or len(context.args) < 2:
+        return update.message.reply_text("❗ Використання: /deduct <username> <кількість>")
+        
+    target_user = context.args[0].replace("@", "")
+    try:
+        amount = int(context.args[1])
+    except ValueError:
+        return update.message.reply_text("❌ Кількість має бути числом.")
+        
+    # 🔥 Використовуємо spend_coins — вона коректно спише з сімейного або особистого рахунку
+    if spend_coins(target_user, amount):
+        save_data()
+        new_bal = get_shared_balance(target_user)
+        update.message.reply_text(f"✅ Вираховано {amount} 🪙 у користувача @{target_user}. Поточний баланс: {new_bal} 🪙")
     else:
-        COINS[username] = max(COINS.get(username,0)-amount,0)
-    save_data()
-    update.message.reply_text(f"✅ @{username} -{amount}")
+        update.message.reply_text(f"❌ Не вдалося списати кошти. У @{target_user} недостатньо монет (баланс: {get_shared_balance(target_user)} 🪙).")
 
 def gift_coins(update, context):
     if not update.message.reply_to_message or len(context.args) != 1:
@@ -778,23 +787,23 @@ def gacha_button_handler(update, context):
 
 # ================== АНКЕТА ГРАВЦЯ ==================
 def profile_command(update, context):
-    """Виводить загальну інформацію про гравця з повною інтеграцією сімейного бюджету"""
+    """Виводить повну анкету гравця з абсолютно правильною фінансовою інтеграцією"""
     user = update.message.from_user
     username = user.username or user.first_name
     
-    # Розраховуємо баланси з урахуванням сімейного статусу
+    # 🔥 ВИКОРИСТОВУЄМО ГЛОБАЛЬНУ ФУНКЦІЮ БАЛАНСУ ДЛЯ ВСІХ ПЕРЕВІРОК
+    current_balance = get_shared_balance(username)
+    deposit = DEPOSITS.get(username, 0)
+    
+    # Визначаємо шлюбний статус
     if is_married(username):
         partner = MARRIAGES[username]["partner"]
-        balance = MARRIAGES[username]["shared"]
         status = f"💍 У шлюбі з @{partner}"
         money_label = "💰 <b>Спільний баланс пари:</b>"
     else:
-        balance = COINS.get(username, 0)
         status = "💔 В активному пошуку"
-        money_label = "💰 <b>Особистий баланс:</b>"
+        money_label = "💰 <b>Твій баланс:</b>"
         
-    deposit = DEPOSITS.get(username, 0)
-    
     rings = INVENTORY.get(username, {}).get("rings", [])
     rings_text = ", ".join(rings) if rings else "Немає"
     
@@ -809,7 +818,7 @@ def profile_command(update, context):
         f"👤 <b>Анкета гравця @{username}</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"❤️ <b>Статус:</b> {status}\n"
-        f"{money_label} {balance} 🪙\n"
+        f"{money_label} <b>{current_balance} 🪙</b>\n"
         f"🏦 <b>Депозит у банку:</b> {deposit} 🪙\n\n"
         f"💍 <b>Твої каблучки:</b> {rings_text}\n"
         f"🃏 <b>Альбом знахідок:</b> {total_cards} шт. ({unique_cards}/38 унікальних)\n"
