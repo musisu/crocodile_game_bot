@@ -1079,6 +1079,84 @@ def album_view_handler(update, context):
             else:
                 query.edit_message_text(text=text, reply_markup=back_markup, parse_mode="HTML")
 
+def sell_card_handler(update, context):
+    """Обробляє натискання на кнопку швидкого продажу карти боту з динамічною ціною"""
+    query = update.callback_query
+    query.answer()
+
+    username = query.from_user.username or query.from_user.first_name
+    collections = INVENTORY.get(username, {}).get("collections", {})
+    valid_cats = sorted(list(collections.keys()))
+    
+    parts = query.data.split("_")
+    cat_idx = int(parts[1])
+    card_idx = int(parts[2])
+
+    if cat_idx >= len(valid_cats):
+        return query.edit_message_text("❌ Помилка продажу.")
+
+    cat_name = valid_cats[cat_idx]
+    card_names = sorted(list(collections[cat_name].keys()))
+
+    if card_idx >= len(card_names):
+        return query.edit_message_text("❌ Помилка продажу.")
+
+    card_name = card_names[card_idx]
+    current_count = collections[cat_name][card_name]
+
+    if current_count <= 0:
+        return query.edit_message_text("❌ У тебе немає цієї карти для продажу.")
+
+    sell_price = 20
+    name_lower = card_name.lower()
+    
+    for key, price in CARD_PRICES.items():
+        if key in name_lower:
+            sell_price = price
+            break
+
+    if current_count == 1:
+        collections[cat_name].pop(card_name)
+        if not collections[cat_name]:
+            collections.pop(cat_name)
+    else:
+        collections[cat_name][card_name] -= 1
+
+    add_coins(username, sell_price)
+    save_data()
+
+    valid_cats_updated = sorted(list(collections.keys()))
+    keyboard = []
+    
+    if cat_name in collections:
+        updated_cards = sorted(list(collections[cat_name].keys()))
+        row = []
+        for c_idx, c_name in enumerate(updated_cards):
+            count = collections[cat_name][c_name]
+            row.append(InlineKeyboardButton(f"{c_name} (x{count})", callback_data=f"alb_item_{cat_idx}_{c_idx}"))
+            if len(row) == 2:
+                keyboard.append(row)
+                row = []
+        if row: keyboard.append(row)
+        keyboard.append([InlineKeyboardButton("⬅️ Назад до розділів", callback_data="alb_main")])
+        msg_text = f"✅ Карта <b>{card_name}</b> успішно продана за <b>{sell_price} 🪙</b>!\n\n🗂 <b>Розділ: {cat_name}</b>\nОбери карту:"
+    else:
+        total_album_cards = sum(sum(cat.values()) for cat in collections.values())
+        total_unique_cards = sum(len(cat) for cat in collections.values())
+        
+        for idx, name in enumerate(valid_cats_updated):
+            cat_total = sum(collections[name].values())
+            cat_unique = len(collections[name])
+            max_in_cat = MAX_CARDS.get(name, "?")
+            keyboard.append([InlineKeyboardButton(f"{name} ({cat_unique}/{max_in_cat})", callback_data=f"alb_cat_{idx}")])
+            
+        msg_text = f"✅ Карта <b>{card_name}</b> була останньою і продана за <b>{sell_price} 🪙</b>!\n\n📖 <b>Твій Альбом Знахідок</b>\nОбери розділ:"
+
+    if query.message.photo:
+        query.message.delete()
+        context.bot.send_message(chat_id=query.message.chat_id, text=msg_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+    else:
+        query.edit_message_text(text=msg_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 # ================== МОДУЛЬ АУКЦІОНІВ ==================
 
