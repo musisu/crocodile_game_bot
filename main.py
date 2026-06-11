@@ -1057,86 +1057,6 @@ def album_view_handler(update, context):
                 query.edit_message_text(text=text, reply_markup=back_markup, parse_mode="HTML")
 
 
-def sell_card_handler(update, context):
-    """Обробляє натискання на кнопку швидкого продажу карти боту з динамічною ціною"""
-    query = update.callback_query
-    query.answer()
-
-    username = query.from_user.username or query.from_user.first_name
-    collections = INVENTORY.get(username, {}).get("collections", {})
-    valid_cats = sorted(list(collections.keys()))
-    
-    parts = query.data.split("_")
-    cat_idx = int(parts[1])
-    card_idx = int(parts[2])
-
-    if cat_idx >= len(valid_cats):
-        return query.edit_message_text("❌ Помилка продажу.")
-
-    cat_name = valid_cats[cat_idx]
-    card_names = sorted(list(collections[cat_name].keys()))
-
-    if card_idx >= len(card_names):
-        return query.edit_message_text("❌ Помилка продажу.")
-
-    card_name = card_names[card_idx]
-    current_count = collections[cat_name][card_name]
-
-    if current_count <= 0:
-        return query.edit_message_text("❌ У тебе немає цієї карти для продажу.")
-
-    sell_price = 20
-    name_lower = card_name.lower()
-    
-    for key, price in CARD_PRICES.items():
-        if key in name_lower:
-            sell_price = price
-            break
-
-    if current_count == 1:
-        collections[cat_name].pop(card_name)
-        if not collections[cat_name]:
-            collections.pop(cat_name)
-    else:
-        collections[cat_name][card_name] -= 1
-
-    add_coins(username, sell_price)
-    save_data()
-
-    valid_cats_updated = sorted(list(collections.keys()))
-    keyboard = []
-    
-    if cat_name in collections:
-        updated_cards = sorted(list(collections[cat_name].keys()))
-        row = []
-        for c_idx, c_name in enumerate(updated_cards):
-            count = collections[cat_name][c_name]
-            row.append(InlineKeyboardButton(f"{c_name} (x{count})", callback_data=f"alb_item_{cat_idx}_{c_idx}"))
-            if len(row) == 2:
-                keyboard.append(row)
-                row = []
-        if row: keyboard.append(row)
-        keyboard.append([InlineKeyboardButton("⬅️ Назад до розділів", callback_data="alb_main")])
-        msg_text = f"✅ Карта <b>{card_name}</b> успішно продана за <b>{sell_price} 🪙</b>!\n\n🗂 <b>Розділ: {cat_name}</b>\nОбери карту:"
-    else:
-        total_album_cards = sum(sum(cat.values()) for cat in collections.values())
-        total_unique_cards = sum(len(cat) for cat in collections.values())
-        
-        for idx, name in enumerate(valid_cats_updated):
-            cat_total = sum(collections[name].values())
-            cat_unique = len(collections[name])
-            max_in_cat = MAX_CARDS.get(name, "?")
-            keyboard.append([InlineKeyboardButton(f"{name} ({cat_unique}/{max_in_cat})", callback_data=f"alb_cat_{idx}")])
-            
-        msg_text = f"✅ Карта <b>{card_name}</b> була останньою і продана за <b>{sell_price} 🪙</b>!\n\n📖 <b>Твій Альбом Знахідок</b>\nОбери розділ:"
-
-    if query.message.photo:
-        query.message.delete()
-        context.bot.send_message(chat_id=query.message.chat_id, text=msg_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-    else:
-        query.edit_message_text(text=msg_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-
-
 # ================== МОДУЛЬ АУКЦІОНІВ ==================
 
 def auc_start_handler(update, context):
@@ -1256,7 +1176,7 @@ def auc_bid_reply_handler(update, context):
     if bid_amount <= lot["current_price"]:
         return message.reply_text(f"❌ Твоя ставка має бути вищою за поточну ціну ({lot['current_price']} 🪙)!")
 
-    # Розумна перевірка балансу (враховує шлюби)
+    # 🔥 ФІКС БАГУ №1: Використовуємо get_shared_balance замість COINS.get для перевірки сімейного бюджету шлюбів
     bidder_coins = get_shared_balance(bidder)
     if bidder_coins < bid_amount:
         return message.reply_text(f"❌ У тебе недостатньо монет! Твій баланс: {bidder_coins} 🪙")
@@ -1294,7 +1214,7 @@ def process_auc_accept(lot_id, username):
 
     lot = auctions_db[lot_id]
     if lot["owner"] != username:
-        return "❌ Тільки власник карти може завершити цей анукціон!", False
+        return "❌ Тільки власник карти може завершити цей аукціон!", False
 
     if not lot["highest_bidder"]:
         return "❌ На цей лот ще немає жодної ставки. Ви можете лише скасувати його.", False
@@ -1302,7 +1222,7 @@ def process_auc_accept(lot_id, username):
     bidder = lot["highest_bidder"]
     final_price = lot["current_price"]
 
-    # Розумна фінальна перевірка монет перед транзакцією
+    # Перевірка балансу перед закриттям лоту
     bidder_coins = get_shared_balance(bidder)
     if bidder_coins < final_price:
         lot["highest_bidder"] = None
@@ -1310,11 +1230,14 @@ def process_auc_accept(lot_id, username):
         save_data()
         return f"❌ У покупця @{bidder} забракло грошей! Ставку скасовано, торги скинуто.", False
 
-    # Списуємо у покупця та додаємо продавцю через spend_coins/add_coins
+    # 🔥 ФІКС БАГУ №2: Використовуємо spend_coins та add_coins для правильного списання/нарахування одруженим
     spend_coins(bidder, final_price)
     add_coins(lot["owner"], final_price)
 
-    if "collections" not in INVENTORY.setdefault(bidder, {}):
+    # 🔥 ФІКС БАГУ №3: Безпечне розгортання та додавання карти в інвентар переможця
+    if bidder not in INVENTORY:
+        INVENTORY[bidder] = {}
+    if "collections" not in INVENTORY[bidder]:
         INVENTORY[bidder]["collections"] = {}
     if lot["cat_name"] not in INVENTORY[bidder]["collections"]:
         INVENTORY[bidder]["collections"][lot["cat_name"]] = {}
@@ -1342,7 +1265,10 @@ def process_auc_cancel(lot_id, username):
     if lot["owner"] != username:
         return "❌ Тільки власник карти може скасувати цей аукціон!", False
 
-    if "collections" not in INVENTORY.setdefault(lot["owner"], {}):
+    # Безпечне повернення лоту назад власнику в альбом
+    if lot["owner"] not in INVENTORY:
+        INVENTORY[lot["owner"]] = {}
+    if "collections" not in INVENTORY[lot["owner"]]:
         INVENTORY[lot["owner"]]["collections"] = {}
     if lot["cat_name"] not in INVENTORY[lot["owner"]]["collections"]:
         INVENTORY[lot["owner"]]["collections"][lot["cat_name"]] = {}
@@ -1365,7 +1291,7 @@ def auc_button_click_handler(update, context):
     parts = query.data.split("_")
     action = parts[1]  # accept або cancel
     
-    # 🔥 Надійне зшивання ID лоту, навіть якщо у рядку є кілька символів "_" (наприклад: lot_48123)
+    # 🔥 ФІКС СТАРЛІНК-БАГУ: Зшиваємо ID лоту назад, ігноруючи підкреслення у назві лоту
     lot_id = "_".join(parts[2:])
     
     if action == "accept":
@@ -1448,8 +1374,69 @@ def main():
     )
     dp.add_handler(conv, group=1)
 
-    # ... після ініціалізації updater
     job_queue = updater.job_queue
+
+    # Ранковий звіт про погоду та фазу місяця о 08:00 за Києвом
+    job_queue.run_daily(send_morning_report, time=time(hour=8, minute=0, tzinfo=KYIV_TZ))
+
+    # Щодня о 00:00 київського часу
+    job_queue.run_daily(send_daily_stats, time=time(hour=23, minute=59, tzinfo=KYIV_TZ))
+
+    # Щопонеділка о 06:00 київського часу
+    job_queue.run_daily(send_weekly_stats, time=time(hour=6, minute=0, tzinfo=KYIV_TZ), days=(0,))
+
+    # Першого числа місяця о 10:00 київського часу
+    job_queue.run_monthly(send_monthly_stats, when=time(hour=10, minute=0, tzinfo=KYIV_TZ), day=1)
+
+    job_queue.run_daily(deposit_daily_interest, time=time(hour=0, minute=0, tzinfo=KYIV_TZ))
+
+    job_queue.run_daily(send_daily_message_stats, time=time(hour=0, minute=0, tzinfo=KYIV_TZ))
+
+    # Commands
+    dp.add_handler(CommandHandler("wallet", wallet))
+    dp.add_handler(CommandHandler("top_money", top_money))
+    dp.add_handler(CommandHandler("top", top_messages))
+    dp.add_handler(CommandHandler("add", add_coins_cmd))
+    dp.add_handler(CommandHandler("deduct", deduct_coins_cmd))
+    dp.add_handler(CommandHandler("gift", gift_coins))
+    dp.add_handler(CommandHandler("steal", steal_coins))
+    dp.add_handler(CommandHandler("buy_ring", buy_ring))
+    dp.add_handler(CommandHandler("marry", marry))
+    dp.add_handler(CommandHandler("divorce", divorce))
+    dp.add_handler(CommandHandler("deposit_balance", deposit_balance))
+    dp.add_handler(CommandHandler("deposit_add", deposit_add))
+    dp.add_handler(CommandHandler("deposit_withdraw", deposit_withdraw))
+    dp.add_handler(CommandHandler("post_stats_report", post_stats_report))
+    dp.add_handler(CallbackQueryHandler(marriage_callback, pattern="^marry_"))
+    
+    # Модуль гача-карток
+    dp.add_handler(CommandHandler("travel", travel_command))
+    dp.add_handler(CallbackQueryHandler(gacha_button_handler, pattern="^gacha_"))
+    dp.add_handler(CommandHandler("morning_report", manual_morning_report))
+    
+    # Модуль альбому
+    dp.add_handler(CommandHandler("album", album_command))
+    dp.add_handler(CallbackQueryHandler(album_view_handler, pattern="^alb_"))
+    dp.add_handler(CallbackQueryHandler(sell_card_handler, pattern="^sell_"))
+    
+    # Модуль аукціонів
+    dp.add_handler(CallbackQueryHandler(auc_start_handler, pattern="^auc_start_"))
+    dp.add_handler(CallbackQueryHandler(auc_button_click_handler, pattern="^aucbtn_"))
+    dp.add_handler(CommandHandler("auctions", list_auctions_command))
+    dp.add_handler(CommandHandler("auc_accept", auc_accept_command))
+    dp.add_handler(CommandHandler("auc_cancel", auc_cancel_command))
+    dp.add_handler(MessageHandler(Filters.text & Filters.reply & ~Filters.command, auc_bid_reply_handler), group=2)
+    
+    # Профіль гравця
+    dp.add_handler(CommandHandler("profile", profile_command))
+    dp.add_handler(CommandHandler("me", profile_command))
+
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == "__main__":
+    main()
+
 
     # Ранковий звіт про погоду та фазу місяця о 08:00 за Києвом
     job_queue.run_daily(send_morning_report, time=time(hour=8, minute=0, tzinfo=KYIV_TZ))
